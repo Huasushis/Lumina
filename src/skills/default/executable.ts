@@ -55,17 +55,7 @@ export function createSkillSelectorSkill(
   });
 }
 
-const defaultSelectorCandidates: AnySkill[] = [
-  ...basicMathSkills,
-  ...timeSkills
-];
-
-export const selectorSkills: ExecutableSkill[] = [
-  createSkillSelectorSkill(defaultSelectorCandidates)
-];
-
 export const defaultExecutableSkillGroups: Record<string, ExecutableSkill[]> = {
   basicMath: basicMathSkills,
-  time: timeSkills,
-  selector: selectorSkills
+  time: timeSkills
 };

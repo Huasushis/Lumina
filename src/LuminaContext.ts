@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import {
   AnySkill,
   ILLMProvider,
-  isExecutableSkill,
   isKnowledgeSkill,
   isLuminaErrorEnvelope,
   KnowledgeSkill,
@@ -12,23 +11,11 @@ import {
   Message,
   RegisteredLLMFunction,
   RetryPolicy,
-  Skill,
-  SkillFilterConfig,
-  SkillSelectionCandidate,
-  SkillSelectionConstraints,
-  SkillSelectionResultItem
+  Skill
 } from './types.js';
 import { Sandbox, SandboxExecutionError } from './Sandbox.js';
 import { DebugLogger } from './DebugSink.js';
-import { defineSkill } from './SkillBuilder.js';
-import {
-  DEFAULT_LLM_FUNCTION_STORE_PATH,
-  LLMFunctionStore
-} from './LLMFunctionStore.js';
-import {
-  buildSkillSelectorSkill,
-  rankSkillCandidatesByHeuristic
-} from './skills/default/selector.js';
+import { defineSkill, DefineSkillOptions } from './SkillBuilder.js';
 
 interface TextifyResult {
   ok: boolean;
@@ -37,9 +24,14 @@ interface TextifyResult {
   reason?: string;
 }
 
+export interface TSFunctionLLMContext {
+  history: Message[];
+  skills: AnySkill[];
+  provider: ILLMProvider;
+}
+
 const DEFAULT_FUNCTION_MAX_PARAM_BYTES_BASE = 32 * 1024;
 const DEFAULT_FUNCTION_MAX_PARAM_BYTES_ADAPTIVE_MAX = 512 * 1024;
-const DEFAULT_SKILL_SELECTOR_TOP_N = 6;
 
 const CONTEXT_WINDOW_ERROR_PATTERNS = [
   /context length/i,
@@ -59,9 +51,6 @@ export class LuminaContext {
   public history: Message[];
   public provider: ILLMProvider;
   public config: LuminaConfig;
-  private readonly functionStore: LLMFunctionStore;
-  private persistedFunctionsLoaded: boolean;
-  private persistedFunctionsLoadPromise: Promise<void> | null;
 
   constructor(
     provider: ILLMProvider,
@@ -77,21 +66,6 @@ export class LuminaContext {
     const importPolicy = config.sandbox?.importPolicy ?? 'deny';
     const autoInstallMissingPackages = config.sandbox?.autoInstallMissingPackages
       ?? (importPolicy === 'allowlist' || importPolicy === 'all');
-    const persistenceEnabled = config.persistence?.enabled ?? true;
-    const persistenceFilePath = config.persistence?.filePath ?? DEFAULT_LLM_FUNCTION_STORE_PATH;
-    const persistenceAutoLoad = config.persistence?.autoLoad ?? true;
-    const persistenceAutoSave = config.persistence?.autoSave ?? true;
-
-    const skillFilterDefaults: SkillFilterConfig = {
-      enabled: config.skillFilter?.enabled ?? true,
-      applyToLLMFunctions: config.skillFilter?.applyToLLMFunctions ?? true,
-      selectorSkillName: config.skillFilter?.selectorSkillName ?? '__skillSelector',
-      topN: config.skillFilter?.topN ?? DEFAULT_SKILL_SELECTOR_TOP_N,
-      includeNames: config.skillFilter?.includeNames,
-      excludeNames: config.skillFilter?.excludeNames,
-      includeTags: config.skillFilter?.includeTags,
-      excludeTags: config.skillFilter?.excludeTags
-    };
 
     this.provider = provider;
     this.memory = memory;
@@ -115,23 +89,8 @@ export class LuminaContext {
         installProvider: config.sandbox?.installProvider ?? 'auto',
         packageRegistry: config.sandbox?.packageRegistry,
         maxInstallAttempts: config.sandbox?.maxInstallAttempts ?? 1
-      },
-      persistence: {
-        enabled: persistenceEnabled,
-        filePath: persistenceFilePath,
-        autoLoad: persistenceAutoLoad,
-        autoSave: persistenceAutoSave
-      },
-      skillFilter: skillFilterDefaults
+      }
     };
-
-    this.functionStore = new LLMFunctionStore(this.config.persistence?.filePath ?? DEFAULT_LLM_FUNCTION_STORE_PATH);
-    this.persistedFunctionsLoaded = false;
-    this.persistedFunctionsLoadPromise = null;
-
-    if (this.config.persistence?.enabled !== false && this.config.persistence?.autoLoad !== false) {
-      void this.ensurePersistedFunctionsLoaded();
-    }
   }
 
   private getRetryPolicy(): Required<RetryPolicy> {
@@ -167,220 +126,61 @@ export class LuminaContext {
     ];
   }
 
-  private shouldApplySkillFilter(scope: 'call' | 'llmFunction'): boolean {
-    if (this.config.skillFilter?.enabled === false) {
-      return false;
-    }
-
-    if (scope === 'llmFunction' && this.config.skillFilter?.applyToLLMFunctions === false) {
-      return false;
-    }
-
-    return true;
+  private getSkillsForProvider(): AnySkill[] {
+    return [
+      ...Array.from(this.skills.values()),
+      ...this.getRuntimeKnowledgeSkills()
+    ];
   }
 
-  private extractSkillSelectionResults(value: unknown): SkillSelectionResultItem[] {
-    const selected = Array.isArray(value)
-      ? value
-      : value && typeof value === 'object' && Array.isArray((value as { selected?: unknown[] }).selected)
-        ? (value as { selected: unknown[] }).selected
-        : [];
-
-    return selected
-      .map((item) => {
-        if (!item || typeof item !== 'object') {
-          return null;
-        }
-
-        const candidate = item as Partial<SkillSelectionResultItem>;
-        if (typeof candidate.name !== 'string' || candidate.name.length === 0) {
-          return null;
-        }
-
-        return {
-          name: candidate.name,
-          score: typeof candidate.score === 'number' && Number.isFinite(candidate.score)
-            ? candidate.score
-            : 1,
-          reason: typeof candidate.reason === 'string' && candidate.reason.length > 0
-            ? candidate.reason
-            : 'selected by model'
-        } as SkillSelectionResultItem;
-      })
-      .filter((item): item is SkillSelectionResultItem => item !== null)
-      .sort((a, b) => b.score - a.score);
-  }
-
-  private async querySkillSelectionByProvider(
-    query: string,
-    candidates: SkillSelectionCandidate[],
-    constraints: SkillSelectionConstraints,
-    callId: string,
-    logger: DebugLogger
-  ): Promise<SkillSelectionResultItem[]> {
-    const prompt = [
-      '[SKILL_SELECTOR_QUERY]',
-      `Query: ${query}`,
-      `Constraints: ${JSON.stringify(constraints)}`,
-      `Candidates: ${JSON.stringify(candidates)}`,
-      'Return JSON as intent=return with value={"selected":[{"name":"...","score":0-100,"reason":"..."}]}.',
-      'You must only choose names from the candidate list.'
-    ].join('\n');
-
-    const response = await this.provider.generate(
-      [{ role: 'user', content: prompt }],
-      this.getRuntimeKnowledgeSkills(),
-      { callId, logger }
-    );
-
-    if (response.message.intent === 'return') {
-      return this.extractSkillSelectionResults(response.message.value);
-    }
-
-    if (response.message.intent === 'eval') {
-      try {
-        const parsed = JSON.parse(response.message.code) as unknown;
-        return this.extractSkillSelectionResults(parsed);
-      } catch {
-        return [];
-      }
-    }
-
-    return [];
-  }
-
-  private async getSkillsForProvider(
-    taskDescription: string,
-    callId: string,
-    logger: DebugLogger,
-    scope: 'call' | 'llmFunction' = 'call'
-  ): Promise<AnySkill[]> {
-    const runtimeKnowledgeSkills = this.getRuntimeKnowledgeSkills();
-    const allUserSkills = Array.from(this.skills.values());
-
-    if (!this.shouldApplySkillFilter(scope)) {
-      return [...allUserSkills, ...runtimeKnowledgeSkills];
-    }
-
-    const selectorName = this.config.skillFilter?.selectorSkillName ?? '__skillSelector';
-    const candidateSkills = allUserSkills.filter((skill) => skill.name !== selectorName);
-
-    if (candidateSkills.length === 0) {
-      return runtimeKnowledgeSkills;
-    }
-
-    const selectionConstraints: SkillSelectionConstraints = {
-      topN: this.config.skillFilter?.topN ?? DEFAULT_SKILL_SELECTOR_TOP_N,
-      includeNames: this.config.skillFilter?.includeNames,
-      excludeNames: [
-        ...(this.config.skillFilter?.excludeNames ?? []),
-        selectorName
-      ],
-      includeTags: this.config.skillFilter?.includeTags,
-      excludeTags: this.config.skillFilter?.excludeTags
+  private buildTSFunctionLLMContext(): TSFunctionLLMContext {
+    return {
+      history: [...this.history],
+      skills: Array.from(this.skills.values()),
+      provider: this.provider
     };
+  }
 
-    const selectorSkill = buildSkillSelectorSkill(
-      candidateSkills,
-      async (query, candidates, constraints) => {
-        const mergedConstraints: SkillSelectionConstraints = {
-          ...selectionConstraints,
-          ...constraints,
-          excludeNames: [
-            ...(selectionConstraints.excludeNames ?? []),
-            ...((constraints?.excludeNames ?? []).filter((name) => name !== selectorName)),
-            selectorName
-          ]
-        };
+  private unwrapResultOrThrow(value: any, source: string): any {
+    if (isLuminaErrorEnvelope(value)) {
+      throw new Error(`[${source}] ${value.code}: ${value.message}`);
+    }
 
-        const ranked = await this.querySkillSelectionByProvider(
-          query,
-          candidates,
-          mergedConstraints,
-          callId,
-          logger
-        );
+    if (value && typeof value === 'object' && value.ok === false && 'error' in value) {
+      const message = typeof value.error === 'string'
+        ? value.error
+        : JSON.stringify(value.error);
+      throw new Error(`[${source}] ${message}`);
+    }
 
-        if (ranked.length > 0) {
-          return ranked;
-        }
+    return value;
+  }
 
-        return rankSkillCandidatesByHeuristic(query, candidates, mergedConstraints);
-      },
-      {
-        name: selectorName,
-        defaultTopN: selectionConstraints.topN ?? DEFAULT_SKILL_SELECTOR_TOP_N
-      }
-    );
-
+  private textifyArguments(args: any[], maxBytes: number): TextifyResult {
     try {
-      const selectionOutput = await selectorSkill.execute({
-        query: taskDescription,
-        ...selectionConstraints
-      });
-
-      const selected = this.extractSkillSelectionResults(selectionOutput);
-      if (selected.length === 0) {
-        logger.emit({
-          source: 'context',
-          level: 'debug',
-          event: 'context.skill_filter.fallback_all',
-          callId,
-          payload: {
-            reason: 'selector returned empty result'
-          }
-        });
-        return [...candidateSkills, ...runtimeKnowledgeSkills];
+      const text = JSON.stringify(args);
+      const bytes = Buffer.byteLength(text, 'utf8');
+      if (bytes > maxBytes) {
+        return {
+          ok: false,
+          text,
+          bytes,
+          reason: `Arguments exceed max bytes (${bytes} > ${maxBytes})`
+        };
       }
 
-      const selectedNameSet = new Set(selected.map((item) => item.name));
-      const selectedSkills = candidateSkills.filter((skill) => selectedNameSet.has(skill.name));
-
-      if (selectedSkills.length === 0) {
-        logger.emit({
-          source: 'context',
-          level: 'debug',
-          event: 'context.skill_filter.fallback_all',
-          callId,
-          payload: {
-            reason: 'selector result names not found in skills'
-          }
-        });
-        return [...candidateSkills, ...runtimeKnowledgeSkills];
-      }
-
-      logger.emit({
-        source: 'context',
-        level: 'debug',
-        event: 'context.skill_filter.applied',
-        callId,
-        payload: {
-          scope,
-          query: taskDescription,
-          selected: selected
-        }
-      });
-
-      const selectedKnowledgeSkills = selectedSkills.filter(isKnowledgeSkill);
-      const selectedExecutableSkills = selectedSkills.filter(isExecutableSkill);
-
-      return [
-        ...selectedExecutableSkills,
-        ...selectedKnowledgeSkills,
-        ...runtimeKnowledgeSkills
-      ];
+      return {
+        ok: true,
+        text,
+        bytes
+      };
     } catch (err) {
-      logger.emit({
-        source: 'context',
-        level: 'warn',
-        event: 'context.skill_filter.failed',
-        callId,
-        payload: {
-          error: err instanceof Error ? err.message : String(err)
-        }
-      });
-
-      return [...candidateSkills, ...runtimeKnowledgeSkills];
+      return {
+        ok: false,
+        text: '',
+        bytes: 0,
+        reason: `Arguments are not textifiable: ${err instanceof Error ? err.message : String(err)}`
+      };
     }
   }
 
@@ -427,200 +227,9 @@ export class LuminaContext {
   private normalizeLLMFunctionConfig(config: LLMFunctionConfig): LLMFunctionConfig {
     return {
       ...config,
-      enableCodeCache: config.enableCodeCache ?? true,
       adaptiveParameterBytes: config.adaptiveParameterBytes ?? true,
       adaptiveParameterBytesMax: config.adaptiveParameterBytesMax ?? DEFAULT_FUNCTION_MAX_PARAM_BYTES_ADAPTIVE_MAX
     };
-  }
-
-  private upsertLLMFunctionInMemory(config: LLMFunctionConfig): RegisteredLLMFunction {
-    const normalizedConfig = this.normalizeLLMFunctionConfig(config);
-    const existing = this.llmFunctions.get(normalizedConfig.name);
-
-    if (existing) {
-      existing.config = {
-        ...existing.config,
-        ...normalizedConfig,
-        maxParameterBytes: normalizedConfig.maxParameterBytes ?? existing.config.maxParameterBytes,
-        adaptiveParameterBytes: normalizedConfig.adaptiveParameterBytes ?? existing.config.adaptiveParameterBytes ?? true,
-        adaptiveParameterBytesMax: normalizedConfig.adaptiveParameterBytesMax
-          ?? existing.config.adaptiveParameterBytesMax
-          ?? DEFAULT_FUNCTION_MAX_PARAM_BYTES_ADAPTIVE_MAX,
-        enableCodeCache: normalizedConfig.enableCodeCache ?? existing.config.enableCodeCache ?? true
-      };
-
-      return existing;
-    }
-
-    const registration: RegisteredLLMFunction = {
-      config: normalizedConfig,
-      state: {
-        mode: normalizedConfig.preferredMode,
-        revision: 0
-      }
-    };
-
-    this.llmFunctions.set(normalizedConfig.name, registration);
-    return registration;
-  }
-
-  private async persistLLMFunction(
-    name: string,
-    registration: RegisteredLLMFunction,
-    callId?: string,
-    logger?: DebugLogger
-  ): Promise<void> {
-    if (this.config.persistence?.enabled === false || this.config.persistence?.autoSave === false) {
-      return;
-    }
-
-    try {
-      await this.functionStore.upsertOne(name, registration);
-      logger?.emit({
-        source: 'context',
-        level: 'debug',
-        event: 'context.persistence.save_function',
-        callId,
-        payload: {
-          name,
-          revision: registration.state.revision
-        }
-      });
-    } catch (err) {
-      logger?.emit({
-        source: 'context',
-        level: 'warn',
-        event: 'context.persistence.save_function_failed',
-        callId,
-        payload: {
-          name,
-          error: err instanceof Error ? err.message : String(err)
-        }
-      });
-    }
-  }
-
-  private async ensurePersistedFunctionsLoaded(callId?: string, logger?: DebugLogger): Promise<void> {
-    if (this.persistedFunctionsLoaded) {
-      return;
-    }
-
-    if (this.config.persistence?.enabled === false || this.config.persistence?.autoLoad === false) {
-      this.persistedFunctionsLoaded = true;
-      return;
-    }
-
-    if (this.persistedFunctionsLoadPromise) {
-      await this.persistedFunctionsLoadPromise;
-      return;
-    }
-
-    this.persistedFunctionsLoadPromise = (async () => {
-      try {
-        const loaded = await this.functionStore.loadAll();
-        for (const [name, registration] of loaded.entries()) {
-          const normalizedConfig = this.normalizeLLMFunctionConfig({
-            ...registration.config,
-            name
-          });
-
-          const existing = this.llmFunctions.get(name);
-          if (!existing) {
-            this.llmFunctions.set(name, {
-              config: normalizedConfig,
-              state: {
-                mode: registration.state.mode,
-                cachedCode: registration.state.cachedCode,
-                revision: registration.state.revision
-              }
-            });
-            continue;
-          }
-
-          existing.config = this.normalizeLLMFunctionConfig({
-            ...registration.config,
-            ...existing.config,
-            name
-          });
-
-          existing.state = {
-            mode: existing.state.mode ?? registration.state.mode,
-            cachedCode: existing.state.cachedCode ?? registration.state.cachedCode,
-            revision: Math.max(existing.state.revision, registration.state.revision)
-          };
-        }
-
-        logger?.emit({
-          source: 'context',
-          level: 'info',
-          event: 'context.persistence.loaded',
-          callId,
-          payload: {
-            count: loaded.size,
-            filePath: this.functionStore.getFilePath()
-          }
-        });
-      } catch (err) {
-        logger?.emit({
-          source: 'context',
-          level: 'warn',
-          event: 'context.persistence.load_failed',
-          callId,
-          payload: {
-            filePath: this.functionStore.getFilePath(),
-            error: err instanceof Error ? err.message : String(err)
-          }
-        });
-      } finally {
-        this.persistedFunctionsLoaded = true;
-        this.persistedFunctionsLoadPromise = null;
-      }
-    })();
-
-    await this.persistedFunctionsLoadPromise;
-  }
-
-  private unwrapResultOrThrow(value: any, source: string): any {
-    if (isLuminaErrorEnvelope(value)) {
-      throw new Error(`[${source}] ${value.code}: ${value.message}`);
-    }
-
-    if (value && typeof value === 'object' && value.ok === false && 'error' in value) {
-      const message = typeof value.error === 'string'
-        ? value.error
-        : JSON.stringify(value.error);
-      throw new Error(`[${source}] ${message}`);
-    }
-
-    return value;
-  }
-
-  private textifyArguments(args: any[], maxBytes: number): TextifyResult {
-    try {
-      const text = JSON.stringify(args);
-      const bytes = Buffer.byteLength(text, 'utf8');
-      if (bytes > maxBytes) {
-        return {
-          ok: false,
-          text,
-          bytes,
-          reason: `Arguments exceed max bytes (${bytes} > ${maxBytes})`
-        };
-      }
-
-      return {
-        ok: true,
-        text,
-        bytes
-      };
-    } catch (err) {
-      return {
-        ok: false,
-        text: '',
-        bytes: 0,
-        reason: `Arguments are not textifiable: ${err instanceof Error ? err.message : String(err)}`
-      };
-    }
   }
 
   private getLLMFunctionCallableMap(): Record<string, (...args: any[]) => Promise<any>> {
@@ -664,16 +273,9 @@ export class LuminaContext {
       { role: 'user', content: reviewRequest }
     ];
 
-    const providerSkills = await this.getSkillsForProvider(
-      taskDescription,
-      callId,
-      logger,
-      'call'
-    );
-
     const response = await this.provider.generate(
       reviewHistory,
-      providerSkills,
+      this.getSkillsForProvider(),
       { callId, logger }
     );
 
@@ -703,6 +305,46 @@ export class LuminaContext {
     return null;
   }
 
+  private async regenerateLLMFunctionCodeFromError(
+    registration: RegisteredLLMFunction,
+    previousCode: string,
+    errorMessage: string,
+    callId: string,
+    logger: DebugLogger
+  ): Promise<string | null> {
+    const repairPrompt = [
+      '[LLM_FUNCTION_CODE_REPAIR]',
+      `Function name: ${registration.config.name}`,
+      `Description: ${registration.config.description}`,
+      `Parameters schema: ${JSON.stringify(registration.config.parameters)}`,
+      `Execution error: ${errorMessage}`,
+      'Please return repaired TypeScript code as intent=eval.',
+      'Previous code:',
+      previousCode
+    ].join('\n');
+
+    const response = await this.provider.generate(
+      [{ role: 'user', content: repairPrompt }],
+      this.getSkillsForProvider(),
+      { callId, logger }
+    );
+
+    if (response.message.intent === 'eval') {
+      return response.message.code;
+    }
+
+    if (
+      response.message.intent === 'return'
+      && response.message.value
+      && typeof response.message.value === 'object'
+      && typeof (response.message.value as { code?: unknown }).code === 'string'
+    ) {
+      return (response.message.value as { code: string }).code;
+    }
+
+    return null;
+  }
+
   private async generateLLMFunctionCode(
     registration: RegisteredLLMFunction,
     callId: string,
@@ -718,16 +360,9 @@ export class LuminaContext {
       'If validation fails, return a lumina error envelope object and throw it (or return it for outer throw handling).'
     ].join('\n');
 
-    const providerSkills = await this.getSkillsForProvider(
-      `${registration.config.name}: ${registration.config.description}`,
-      callId,
-      logger,
-      'llmFunction'
-    );
-
     const response = await this.provider.generate(
       [{ role: 'user', content: prompt }],
-      providerSkills,
+      this.getSkillsForProvider(),
       { callId, logger }
     );
 
@@ -769,17 +404,12 @@ export class LuminaContext {
   private async runLLMFunctionCode(
     registration: RegisteredLLMFunction,
     args: any[],
+    code: string,
     callId: string,
-    logger: DebugLogger,
-    codeOverride?: string
+    logger: DebugLogger
   ): Promise<any> {
     const inputObject = this.buildFunctionInputObject(registration.config, args);
     const serializedInput = JSON.stringify(inputObject);
-    const code = codeOverride ?? registration.state.cachedCode;
-    if (!code) {
-      throw new Error(`LLM function ${registration.config.name} has no cached code.`);
-    }
-
     const invocationCode = `const __luminaInput = ${serializedInput};\n${code}`;
 
     const result = await Sandbox.runCode(
@@ -790,7 +420,7 @@ export class LuminaContext {
         clone: () => this.clone(),
         create: (prompt: string) => this.create(prompt),
         llmFunctions: this.getLLMFunctionCallableMap(),
-        createLLMFunction: async (config) => await this.registerLLMFunctionFromSandbox(config, callId, logger)
+        createLLMFunction: async (config) => await this.registerLLMFunctionFromSandbox(config)
       },
       { callId, logger },
       this.config.sandbox
@@ -802,6 +432,7 @@ export class LuminaContext {
   private async runLLMFunctionCodeWithRecovery(
     registration: RegisteredLLMFunction,
     args: any[],
+    initialCode: string,
     callId: string,
     logger: DebugLogger
   ): Promise<any> {
@@ -810,18 +441,14 @@ export class LuminaContext {
     let compileAttempts = 0;
     let runtimeAttempts = 0;
     let reviewAttempts = 0;
-    let activeCode = registration.state.cachedCode;
-
-    if (!activeCode) {
-      throw new Error(`LLM function ${registration.config.name} has no cached code.`);
-    }
+    let activeCode = initialCode;
 
     while (
       compileAttempts <= retryPolicy.maxCompileRetries
       && runtimeAttempts <= retryPolicy.maxRuntimeRetries
     ) {
       try {
-        return await this.runLLMFunctionCode(registration, args, callId, logger, activeCode);
+        return await this.runLLMFunctionCode(registration, args, activeCode, callId, logger);
       } catch (err) {
         const sandboxError = err instanceof SandboxExecutionError
           ? err
@@ -835,10 +462,7 @@ export class LuminaContext {
         if (sandboxError.category === 'runtime') {
           runtimeAttempts++;
 
-          if (
-            sandboxError.aiCodeFrame
-            && reviewAttempts < retryPolicy.maxReviewRetries
-          ) {
+          if (sandboxError.aiCodeFrame && reviewAttempts < retryPolicy.maxReviewRetries) {
             reviewAttempts++;
             const patchedCode = await this.reviewCodeAndGetPatch(
               `llm function ${registration.config.name}`,
@@ -850,13 +474,7 @@ export class LuminaContext {
 
             if (patchedCode) {
               activeCode = patchedCode;
-
-              if (registration.config.enableCodeCache !== false) {
-                registration.state.cachedCode = patchedCode;
-                registration.state.revision += 1;
-                await this.persistLLMFunction(registration.config.name, registration, callId, logger);
-              }
-
+              registration.state.revision += 1;
               continue;
             }
           }
@@ -867,7 +485,21 @@ export class LuminaContext {
             );
           }
 
-          throw sandboxError;
+          const regeneratedCode = await this.regenerateLLMFunctionCodeFromError(
+            registration,
+            activeCode,
+            sandboxError.message,
+            callId,
+            logger
+          );
+
+          if (!regeneratedCode) {
+            throw sandboxError;
+          }
+
+          activeCode = regeneratedCode;
+          registration.state.revision += 1;
+          continue;
         }
 
         compileAttempts++;
@@ -877,7 +509,20 @@ export class LuminaContext {
           );
         }
 
-        throw sandboxError;
+        const regeneratedCode = await this.regenerateLLMFunctionCodeFromError(
+          registration,
+          activeCode,
+          sandboxError.message,
+          callId,
+          logger
+        );
+
+        if (!regeneratedCode) {
+          throw sandboxError;
+        }
+
+        activeCode = regeneratedCode;
+        registration.state.revision += 1;
       }
     }
 
@@ -897,11 +542,7 @@ export class LuminaContext {
     }
 
     const maxParameterBytes = this.resolveEffectiveMaxParameterBytes(registration, args);
-
-    const textified = this.textifyArguments(
-      args,
-      maxParameterBytes
-    );
+    const textified = this.textifyArguments(args, maxParameterBytes);
 
     const negotiationPrompt = [
       '[LLM_FUNCTION_MODE_NEGOTIATION]',
@@ -916,16 +557,9 @@ export class LuminaContext {
       'If arguments are not safely textifiable, choose code mode.'
     ].join('\n');
 
-    const providerSkills = await this.getSkillsForProvider(
-      `${registration.config.name}: ${registration.config.description}`,
-      callId,
-      logger,
-      'llmFunction'
-    );
-
     const response = await this.provider.generate(
       [{ role: 'user', content: negotiationPrompt }],
-      providerSkills,
+      this.getSkillsForProvider(),
       { callId, logger }
     );
 
@@ -934,10 +568,8 @@ export class LuminaContext {
     }
 
     const value = response.message.value;
-    if (typeof value === 'string') {
-      if (value === 'return' || value === 'code') {
-        return value;
-      }
+    if (typeof value === 'string' && (value === 'return' || value === 'code')) {
+      return value;
     }
 
     if (value && typeof value === 'object' && typeof (value as { mode?: unknown }).mode === 'string') {
@@ -951,22 +583,36 @@ export class LuminaContext {
   }
 
   public registerLLMFunction(config: LLMFunctionConfig): (...args: any[]) => Promise<any> {
-    void this.ensurePersistedFunctionsLoaded();
-    const registration = this.upsertLLMFunctionInMemory(config);
-    void this.persistLLMFunction(registration.config.name, registration);
-    return async (...args: any[]) => await this.invokeLLMFunction(registration.config.name, ...args);
+    const normalizedConfig = this.normalizeLLMFunctionConfig(config);
+    const existing = this.llmFunctions.get(normalizedConfig.name);
+
+    if (existing) {
+      existing.config = {
+        ...existing.config,
+        ...normalizedConfig
+      };
+      return async (...args: any[]) => await this.invokeLLMFunction(normalizedConfig.name, ...args);
+    }
+
+    this.llmFunctions.set(normalizedConfig.name, {
+      config: normalizedConfig,
+      state: {
+        mode: normalizedConfig.preferredMode,
+        revision: 0
+      }
+    });
+
+    return async (...args: any[]) => await this.invokeLLMFunction(normalizedConfig.name, ...args);
   }
 
   public async invokeLLMFunction(name: string, ...args: any[]): Promise<any> {
-    const callId = randomUUID();
-    const logger = new DebugLogger(this.config.debug);
-
-    await this.ensurePersistedFunctionsLoaded(callId, logger);
-
     const registration = this.llmFunctions.get(name);
     if (!registration) {
       throw new Error(`LLM function not registered: ${name}`);
     }
+
+    const callId = randomUUID();
+    const logger = new DebugLogger(this.config.debug);
 
     logger.emit({
       source: 'context',
@@ -976,29 +622,22 @@ export class LuminaContext {
       payload: {
         name,
         argsCount: args.length,
-        hasCachedCode: Boolean(registration.state.cachedCode),
-        mode: registration.state.mode
+        lastMode: registration.state.mode
       }
     });
 
-    let mode = registration.state.mode;
-    if (!mode) {
-      mode = await this.negotiateLLMFunctionMode(registration, args, callId, logger);
-      registration.state.mode = mode;
-      await this.persistLLMFunction(name, registration, callId, logger);
-    }
+    let mode = registration.config.preferredMode
+      ?? await this.negotiateLLMFunctionMode(registration, args, callId, logger);
+
+    registration.state.mode = mode;
 
     if (mode === 'return') {
       const maxParameterBytes = this.resolveEffectiveMaxParameterBytes(registration, args);
-      const textified = this.textifyArguments(
-        args,
-        maxParameterBytes
-      );
+      const textified = this.textifyArguments(args, maxParameterBytes);
 
       if (!textified.ok) {
         mode = 'code';
-        registration.state.mode = 'code';
-        await this.persistLLMFunction(name, registration, callId, logger);
+        registration.state.mode = mode;
       } else {
         const returnPrompt = [
           '[LLM_FUNCTION_RETURN_CALL]',
@@ -1031,36 +670,43 @@ export class LuminaContext {
           });
 
           mode = 'code';
-          registration.state.mode = 'code';
-          await this.persistLLMFunction(name, registration, callId, logger);
+          registration.state.mode = mode;
         }
       }
     }
 
-    if (!registration.state.cachedCode || registration.config.enableCodeCache === false) {
-      registration.state.cachedCode = await this.generateLLMFunctionCode(registration, callId, logger);
-      registration.state.revision += 1;
-      await this.persistLLMFunction(name, registration, callId, logger);
-    }
+    const generatedCode = await this.generateLLMFunctionCode(registration, callId, logger);
+    registration.state.revision += 1;
 
-    return await this.runLLMFunctionCodeWithRecovery(registration, args, callId, logger);
+    return await this.runLLMFunctionCodeWithRecovery(registration, args, generatedCode, callId, logger);
   }
 
   private async registerLLMFunctionFromSandbox(
-    config: { name: string; description: string; parameters?: object },
-    callId: string,
-    logger: DebugLogger
+    config: { name: string; description: string; parameters?: object }
   ): Promise<string> {
-    await this.ensurePersistedFunctionsLoaded(callId, logger);
-
-    const registration = this.upsertLLMFunctionInMemory({
+    this.registerLLMFunction({
       name: config.name,
       description: config.description,
       parameters: config.parameters ?? {}
     });
 
-    await this.persistLLMFunction(registration.config.name, registration, callId, logger);
-    return registration.config.name;
+    return config.name;
+  }
+
+  public defineTSFunction<TArgs extends any[], TResult>(
+    name: string,
+    fn: (...args: [...TArgs, TSFunctionLLMContext]) => Promise<TResult> | TResult,
+    options: Omit<DefineSkillOptions, 'name'> = {}
+  ): (...args: TArgs) => Promise<TResult> {
+    const skill = defineSkill(name, async (...args: any[]) => {
+      return await fn(...args as TArgs, this.buildTSFunctionLLMContext());
+    }, options);
+
+    this.injectSkill(skill);
+
+    return async (...args: TArgs) => {
+      return await skill.execute(...args) as TResult;
+    };
   }
 
   /**
@@ -1069,7 +715,7 @@ export class LuminaContext {
   public async clone(): Promise<LuminaContext> {
     const memoryClone = structuredClone(this.memory);
     const historyClone = [...this.history];
-    const skillsClone = new Map(this.skills); // shallow copy the map of stateless functions
+    const skillsClone = new Map(this.skills);
     const cloned = new LuminaContext(
       this.provider,
       memoryClone,
@@ -1101,7 +747,7 @@ export class LuminaContext {
     const created = new LuminaContext(
       this.provider,
       {},
-      new Map(this.skills), // inherit skills by default or let user manually inject? We'll inherit.
+      new Map(this.skills),
       history,
       this.config
     );
@@ -1148,11 +794,14 @@ export class LuminaContext {
   }
 
   /**
-   * Register a map of plain functions as executable skills.
+   * Register a map of plain TS functions as executable skills.
+   * Every function call automatically appends a runtime LLM context object.
    */
   public injectFunctionMap(functionMap: Record<string, (...args: any[]) => any>): void {
     for (const [name, fn] of Object.entries(functionMap)) {
-      this.injectSkill(defineSkill(name, fn));
+      this.injectSkill(defineSkill(name, async (...args: any[]) => {
+        return await fn(...args, this.buildTSFunctionLLMContext());
+      }));
     }
   }
 
@@ -1163,8 +812,6 @@ export class LuminaContext {
     const callId = randomUUID();
     const debugLogger = new DebugLogger(this.config.debug);
     const retryPolicy = this.getRetryPolicy();
-
-    await this.ensurePersistedFunctionsLoaded(callId, debugLogger);
 
     debugLogger.emit({
       source: 'context',
@@ -1201,19 +848,12 @@ export class LuminaContext {
         }
       });
 
-      const latestTaskDescription = this.history[this.history.length - 1]?.content ?? taskDescription;
-      const providerSkills = await this.getSkillsForProvider(
-        latestTaskDescription,
-        callId,
-        debugLogger,
-        'call'
-      );
-
       const response = await this.provider.generate(
         this.history,
-        providerSkills,
+        this.getSkillsForProvider(),
         { callId, logger: debugLogger }
       );
+
       const llmMessage = response.message;
 
       debugLogger.emit({
@@ -1225,9 +865,7 @@ export class LuminaContext {
       });
 
       if (llmMessage.intent === 'return') {
-        // Appending the thought/response history
         this.history.push({ role: 'assistant', content: JSON.stringify(llmMessage) });
-
         const finalValue = this.unwrapResultOrThrow(llmMessage.value, 'context.call.return');
 
         debugLogger.emit({
@@ -1246,16 +884,6 @@ export class LuminaContext {
       if (llmMessage.intent === 'eval') {
         this.history.push({ role: 'assistant', content: JSON.stringify(llmMessage) });
 
-        debugLogger.emit({
-          source: 'context',
-          level: 'trace',
-          event: 'context.eval.code',
-          callId,
-          payload: {
-            code: llmMessage.code
-          }
-        });
-
         let activeCode = llmMessage.code;
 
         while (true) {
@@ -1268,7 +896,7 @@ export class LuminaContext {
                 clone: () => this.clone(),
                 create: (prompt: string) => this.create(prompt),
                 llmFunctions: this.getLLMFunctionCallableMap(),
-                createLLMFunction: async (config) => await this.registerLLMFunctionFromSandbox(config, callId, debugLogger)
+                createLLMFunction: async (config) => await this.registerLLMFunctionFromSandbox(config)
               },
               { callId, logger: debugLogger },
               this.config.sandbox
@@ -1338,18 +966,6 @@ export class LuminaContext {
 
               this.history.push({ role: 'user', content: runtimeErrorMessage });
 
-              debugLogger.emit({
-                source: 'context',
-                level: 'warn',
-                event: 'context.runtime_retry',
-                callId,
-                payload: {
-                  runtimeAttempts,
-                  maxRuntimeRetries: retryPolicy.maxRuntimeRetries,
-                  error: sandboxError.message
-                }
-              });
-
               break;
             }
 
@@ -1370,56 +986,13 @@ export class LuminaContext {
 
             this.history.push({ role: 'user', content: compileErrorMessage });
 
-            debugLogger.emit({
-              source: 'context',
-              level: 'warn',
-              event: 'context.compile_retry',
-              callId,
-              payload: {
-                compileAttempts,
-                maxCompileRetries: retryPolicy.maxCompileRetries,
-                category: sandboxError.category,
-                error: sandboxError.message
-              }
-            });
-
             break;
           }
         }
       } else {
-        debugLogger.emit({
-          source: 'context',
-          level: 'error',
-          event: 'context.intent.unknown',
-          callId,
-          payload: llmMessage
-        });
         throw new Error(`Unknown intent received from LLM: ${(llmMessage as any).intent}`);
       }
     }
-
-    debugLogger.emit({
-      source: 'context',
-      level: 'error',
-      event: 'context.call.failed',
-      callId,
-      payload: {
-        compileAttempts,
-        runtimeAttempts,
-        reviewAttempts,
-        retryPolicy
-      }
-    });
-
-    debugLogger.emit({
-      source: 'context',
-      level: 'error',
-      event: 'context.call.unreachable',
-      callId,
-      payload: {
-        reason: 'loop ended without return'
-      }
-    });
 
     throw new Error(
       `Context call finished without result. compileAttempts=${compileAttempts}, runtimeAttempts=${runtimeAttempts}`

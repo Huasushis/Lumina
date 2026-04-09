@@ -149,7 +149,7 @@ async function main() {
   console.log('add(2,3) =>', addResult);
   console.log('multiply(6,7) =>', mulResult1);
   console.log('multiply(8,9) =>', mulResult2);
-  console.log('multiply cached revision =>', multiplyState?.revision);
+  console.log('multiply revision =>', multiplyState?.revision);
 }
 
 main().catch((err) => {

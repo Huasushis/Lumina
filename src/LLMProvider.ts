@@ -12,16 +12,19 @@ import {
 export interface AliYunProviderOptions {
   model?: string;
   enableThinking?: boolean;
+  additionalModelParams?: Record<string, unknown>;
 }
 
 export class AliYunBailianProvider implements ILLMProvider {
   private client: OpenAI;
   private model: string;
   private enableThinking: boolean;
+  private additionalModelParams: Record<string, unknown>;
 
   constructor(options: AliYunProviderOptions = {}) {
     this.model = options.model || 'qwen-plus';
     this.enableThinking = options.enableThinking ?? false;
+    this.additionalModelParams = options.additionalModelParams ?? {};
 
     // Use DASHSCOPE_API_KEY from environment
     const apiKey = process.env.DASHSCOPE_API_KEY;
@@ -105,6 +108,8 @@ ${formattedKnowledgeSkills.length > 0 ? formattedKnowledgeSkills.join('\n\n') : 
       messages: messagesToSend,
       response_format: { type: 'json_object' }
     };
+
+    Object.assign(createParams, this.additionalModelParams);
 
     if (this.enableThinking) {
       // DashScope specific param

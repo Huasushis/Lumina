@@ -129,26 +129,11 @@ export interface LuminaSandboxConfig {
   maxInstallAttempts?: number;
 }
 
-export interface LLMFunctionPersistenceConfig {
-  enabled?: boolean;
-  filePath?: string;
-  autoLoad?: boolean;
-  autoSave?: boolean;
-}
-
-export interface SkillFilterConfig extends SkillSelectionConstraints {
-  enabled?: boolean;
-  applyToLLMFunctions?: boolean;
-  selectorSkillName?: string;
-}
-
 export interface LuminaConfig {
   maxRetries: number;
   retry?: RetryPolicy;
   debug?: DebugConfig;
   sandbox?: LuminaSandboxConfig;
-  persistence?: LLMFunctionPersistenceConfig;
-  skillFilter?: SkillFilterConfig;
 }
 
 export type LLMFunctionMode = 'return' | 'code';
@@ -161,30 +146,16 @@ export interface LLMFunctionConfig {
   maxParameterBytes?: number;
   adaptiveParameterBytes?: boolean;
   adaptiveParameterBytesMax?: number;
-  enableCodeCache?: boolean;
 }
 
 export interface LLMFunctionState {
   mode?: LLMFunctionMode;
-  cachedCode?: string;
   revision: number;
 }
 
 export interface RegisteredLLMFunction {
   config: LLMFunctionConfig;
   state: LLMFunctionState;
-}
-
-export interface PersistedLLMFunctionEntry {
-  config: LLMFunctionConfig;
-  state: LLMFunctionState;
-  updatedAt: string;
-}
-
-export interface PersistedLLMFunctionDocument {
-  version: 1;
-  updatedAt: string;
-  functions: Record<string, PersistedLLMFunctionEntry>;
 }
 
 export interface LLMErrorEnvelope {

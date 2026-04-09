@@ -1,141 +1,61 @@
 # `src/types.ts`
 
-This file defines all type contracts across Lumina.
+Core type contracts for the simplified Lumina runtime.
 
-## Responsibilities
+## Key responsibilities
 
-- Define message and skill structures.
-- Define dual-intent model output (`return` vs `eval`).
-- Define provider interface contract.
-- Define debug event/logging contracts.
-- Define runtime config shape (`LuminaConfig`).
+- Message/history types
+- Skill union types (executable + knowledge)
+- Provider request/response contracts
+- Runtime config (`LuminaConfig`)
+- AI function registration types (`LLMFunctionConfig`, `RegisteredLLMFunction`)
 
-## Exports
+## Important points
 
-- `Message`
-- `DebugLevel`
-- `DebugEvent`
-- `DebugSink`
-- `DebugLoggerLike`
-- `DebugConfig`
-- `DebugRuntimeContext`
-- `SkillMetadata`
-- `ExecutableSkill`
-- `KnowledgeSkill`
-- `Skill`
-- `AnySkill`
-- `isKnowledgeSkill(...)`
-- `isExecutableSkill(...)`
-- `LuminaSandboxConfig`
-- `LuminaConfig`
-- `LLMResponse`
-- `ProviderResponse`
-- `ILLMProvider`
+### Skills
 
-## Contract Details
+- `ExecutableSkill`: callable by sandbox (`self.skills.*`)
+- `KnowledgeSkill`: prompt-only guidance (not callable)
+- `AnySkill = ExecutableSkill | KnowledgeSkill`
 
-### `Message`
+### Runtime config
 
-```ts
-interface Message {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-```
+`LuminaConfig` now keeps only runtime essentials:
 
-Used as conversation history between context and provider.
+- `maxRetries`
+- `retry` (compile/runtime/review budgets)
+- `debug`
+- `sandbox`
 
-### Skill contracts
+No built-in persistence config, and no built-in internal skill-filter config.
 
-```ts
-interface ExecutableSkill {
-  kind?: 'executable';
-  name: string;
-  description: string;
-  parameters: object;
-  execute: (...args: any[]) => Promise<any> | any;
-}
+### AI function config
 
-interface KnowledgeSkill {
-  kind: 'knowledge';
-  name: string;
-  description: string;
-  content: string;
-}
+`LLMFunctionConfig` contains:
 
-type Skill = ExecutableSkill; // backward-compatible alias
-type AnySkill = ExecutableSkill | KnowledgeSkill;
-```
+- `name`, `description`, `parameters`
+- `preferredMode?: 'return' | 'code'`
+- `maxParameterBytes?`
+- `adaptiveParameterBytes?`
+- `adaptiveParameterBytesMax?`
 
-`parameters` is a JSON-schema-like structure for executable tools. Knowledge skills are prompt-only and not callable.
+No code-cache or persistence fields.
 
-### `LLMResponse`
+### Error envelope
+
+`LLMErrorEnvelope` + `isLuminaErrorEnvelope(...)` are used to normalize model/tool errors.
+
+## Provider contract
 
 ```ts
-type LLMResponse =
-  | { intent: 'return'; value: any }
-  | { intent: 'eval'; code: string };
+generate(
+  history: Message[],
+  skills: AnySkill[],
+  debugContext?: DebugRuntimeContext
+): Promise<ProviderResponse>
 ```
 
-This is the **core protocol** used by `LuminaContext.call()`.
+Provider must return a valid `LLMResponse`:
 
-### `ILLMProvider`
-
-```ts
-interface ILLMProvider {
-  generate(
-    history: Message[],
-    skills: AnySkill[],
-    debugContext?: DebugRuntimeContext
-  ): Promise<ProviderResponse>;
-}
-```
-
-Any provider implementation must output a valid `ProviderResponse` with `message` matching `LLMResponse`.
-
-### Debug-related Contracts
-
-- `DebugEvent`: normalized event shape
-- `DebugSink`: sink abstraction
-- `DebugLoggerLike`: logger abstraction
-- `DebugConfig`: runtime debug options
-- `DebugRuntimeContext`: per-call debug context (`callId + logger`)
-
-## How Other Files Depend on This
-
-- `LLMProvider.ts` uses `Message`, `Skill`, `ProviderResponse`, `DebugRuntimeContext`.
-- `LuminaContext.ts` uses `ILLMProvider`, `LuminaConfig`, `Message`, `Skill`.
-- `Sandbox.ts` uses `Skill`, `DebugRuntimeContext`.
-- `DebugSink.ts` uses all debug contracts.
-
-## Rebuild Checklist
-
-1. Recreate all interfaces/types exactly.
-2. Keep `ILLMProvider.generate(...)` signature synchronized with provider implementations.
-3. Ensure `LuminaConfig` includes `debug?: DebugConfig` and `sandbox?: LuminaSandboxConfig`.
-
-## Common Mistakes
-
-- Forgetting optional `debugContext` in `ILLMProvider.generate`.
-- Returning malformed `LLMResponse` shape from provider.
-- Using incompatible `role` values in `Message`.
-
-## V2 Runtime Additions
-
-- Import policy contract:
-  - `ImportPolicy = 'deny' | 'allowlist' | 'all'`
-  - configured under `LuminaSandboxConfig`
-- Auto-install support for missing packages:
-  - `autoInstallMissingPackages`
-  - `installProvider` / `packageRegistry`
-- Split retry policy:
-  - `retry.maxCompileRetries`
-  - `retry.maxRuntimeRetries`
-  - `retry.maxReviewRetries`
-- Function-like LLM runtime contracts:
-  - `LLMFunctionConfig`
-  - `RegisteredLLMFunction`
-  - `LLMFunctionMode`
-- Structured error envelope:
-  - `LLMErrorEnvelope` + `isLuminaErrorEnvelope(...)`
-
+- `{ intent: 'return', value: ... }`
+- `{ intent: 'eval', code: '...' }`

@@ -13,11 +13,12 @@ This file implements the default model adapter: `AliYunBailianProvider`.
 ## Constructor
 
 ```ts
-new AliYunBailianProvider({ model?, enableThinking? })
+new AliYunBailianProvider({ model?, enableThinking?, additionalModelParams? })
 ```
 
 - `model` default: `qwen-plus`
 - `enableThinking` default: `false`
+- `additionalModelParams` default: `{}` (passthrough fields merged into request body)
 - Requires `process.env.DASHSCOPE_API_KEY`
 
 If API key is missing, constructor throws immediately.
@@ -72,4 +73,5 @@ generate(
 - Provider prompt now treats import/require as policy-driven (not hardcoded deny).
 - Prompt includes structured error-envelope convention for return/code paths.
 - Prompt acknowledges `self.llmFunctions.*` when available in runtime context.
+- Provider keeps `enableThinking` and optional request passthrough params for model-level tuning.
 

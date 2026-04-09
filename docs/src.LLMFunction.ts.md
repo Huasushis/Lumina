@@ -16,5 +16,6 @@ Function-like wrapper APIs for LLM calls.
 
 ## Notes
 
-- First-call mode negotiation and code caching are handled in `LuminaContext`.
+- Return/code negotiation is handled in `LuminaContext` at invocation time.
+- No function-store persistence is used in current runtime design.
 - This module is intentionally thin and only provides convenience wrappers.
