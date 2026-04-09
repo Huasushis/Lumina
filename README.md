@@ -27,15 +27,22 @@ Lumina addresses this with:
 ```text
 Lumina/
 ├─ src/
-│  ├─ types.ts          # Core contracts (Message, Skill, LLMResponse, Provider)
-│  ├─ DebugSink.ts       # Debug logger and sink implementations
+│  ├─ types.ts          # Core contracts (Message, skill unions, LLMResponse, Provider)
+│  ├─ DebugSink.ts      # Debug logger and sink implementations
+│  ├─ SkillBuilder.ts   # Declarative helpers: defineSkill / defineKnowledge
+│  ├─ LLMFunction.ts    # Function-like LLM call helper
 │  ├─ LLMProvider.ts    # DashScope/OpenAI-compatible provider adapter
 │  ├─ LuminaContext.ts  # Core orchestration loop (return/eval + retry)
 │  ├─ Sandbox.ts        # Isolated code execution runtime
+│  ├─ skills/
+│  │  └─ default/       # Built-in executable + knowledge-only skills
 │  └─ index.ts          # Public exports
 ├─ examples/
 │  ├─ demo.ts           # End-to-end demo (live provider)
-│  └─ debug-local.ts    # Local mock demo with debug logs
+│  ├─ debug-local.ts    # Local mock demo with debug logs
+│  ├─ default-skills.ts # Declarative + default skills + TS sandbox demo
+│  ├─ llm-function-basic.ts # Function-like LLM API (mode negotiation + code cache)
+│  └─ import-policy-and-autoinstall.ts # Import policy matrix demo
 ├─ docs/
 │  ├─ INDEX.md          # Source-to-doc mapping entry
 │  └─ src.*.md          # One-to-one documentation for each src file
@@ -88,6 +95,72 @@ const answer = await ctx.call("Tell me what 1+1 is.");
 console.log(answer);
 ```
 
+## Declarative Skill Definition (Function-like)
+
+```ts
+import { defineSkill, LuminaContext } from "./src/index.js";
+
+const add = defineSkill("add", (a: number, b: number) => a + b, {
+  description: "Add two numbers",
+  parameters: {
+    type: "object",
+    properties: { a: { type: "number" }, b: { type: "number" } },
+    required: ["a", "b"]
+  }
+});
+
+const ctx = new LuminaContext(provider);
+ctx.injectSkill(add);
+```
+
+## Default Skills Loader
+
+```ts
+import { loadDefaultSkills } from "./src/index.js";
+
+ctx.injectSkills(
+  ...loadDefaultSkills({
+    executable: ["basicMath", "time"],
+    knowledge: ["tsSandbox"]
+  })
+);
+```
+
+## Function-like LLM API
+
+```ts
+import { defineLLMFunction } from "./src/index.js";
+
+const add = defineLLMFunction(context, {
+  name: "add",
+  description: "Add two numbers",
+  parameters: {
+    type: "object",
+    properties: { a: { type: "number" }, b: { type: "number" } },
+    required: ["a", "b"]
+  }
+});
+
+const result = await add(2, 3);
+```
+
+This runtime supports:
+
+- first-call mode negotiation (`return` vs `code`)
+- argument textification and byte-size gating for return mode
+- code caching for code mode (reuse generated code across calls)
+- nested calls via `self.llmFunctions.*` in sandbox
+
+## Import Policy & Auto-install
+
+`sandbox.importPolicy` supports:
+
+- `deny`
+- `allowlist`
+- `all`
+
+When policy is `allowlist` or `all`, missing package auto-install is enabled by default (can be explicitly disabled).
+
 ## Running the End-to-End Demo
 
 ```bash
@@ -98,6 +171,24 @@ npx tsx examples/demo.ts
 
 ```bash
 npx tsx examples/debug-local.ts
+```
+
+## Running Declarative + Default Skills Demo
+
+```bash
+npx tsx examples/default-skills.ts
+```
+
+## Running Function-like LLM API Demo
+
+```bash
+npx tsx examples/llm-function-basic.ts
+```
+
+## Running Import Policy Demo
+
+```bash
+npx tsx examples/import-policy-and-autoinstall.ts
 ```
 
 Example real output (from a recent run):
@@ -153,6 +244,12 @@ Generated code runs in an isolated VM context with:
 - `self.create(prompt)`
 - `self.sleep(ms)`
 
+Eval code is TypeScript-first by default:
+
+- Lumina transpiles TypeScript before VM execution.
+- `import/export/require` are rejected in sandbox code.
+- Use only `self.skills.*` and context helper APIs.
+
 ### Provider Adapter
 
 `AliYunBailianProvider` uses OpenAI-compatible SDK calls with DashScope base URL.
@@ -198,8 +295,8 @@ Start here:
 
 ## Roadmap
 
-- Add declarative skill/function definitions
-- Add more examples for recursive contexts and knowledge-only skill injection
+- Add stricter schema inference for declarative skills
+- Add opt-in module allow-list for advanced sandbox scenarios
 
 ## License
 

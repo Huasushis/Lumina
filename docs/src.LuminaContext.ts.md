@@ -16,7 +16,7 @@ This is the orchestration core of Lumina.
 ```ts
 class LuminaContext {
   memory: Record<string, any>;
-  skills: Map<string, Skill>;
+  skills: Map<string, AnySkill>;
   history: Message[];
   provider: ILLMProvider;
   config: LuminaConfig;
@@ -41,6 +41,18 @@ class LuminaContext {
 
 Registers skill by `skill.name` into current context.
 
+### `injectSkills(...skills)`
+
+Batch registration helper for executable and/or knowledge skills.
+
+### `injectKnowledge(skill)`
+
+Registers one knowledge-only skill with runtime guard.
+
+### `injectFunctionMap(functionMap)`
+
+Converts plain functions to executable skills via `defineSkill(...)` and injects them.
+
 ### `call(taskDescription)`
 
 Main execution loop.
@@ -60,7 +72,7 @@ while attempts <= maxRetries:
     return value
   if response.intent == eval:
     append assistant message
-    try sandbox.runCode(..., {callId, logger})
+    try sandbox.runCode(..., {callId, logger}, config.sandbox)
       return result
     catch err:
       attempts++
@@ -95,4 +107,17 @@ while attempts <= maxRetries:
 2. Preserve call-level debug context propagation to provider and sandbox.
 3. Preserve clone/create semantics (memory isolation is critical).
 4. Keep `exportAsFunction()` as a thin call wrapper.
+
+## V2 Runtime Notes
+
+- Context now maintains `llmFunctions` registry for function-like LLM calls.
+- Added APIs:
+  - `registerLLMFunction(...)`
+  - `invokeLLMFunction(name, ...args)`
+- Retry budgets are split:
+  - compile/policy/install retry budget
+  - runtime retry budget
+  - review retry budget
+- Runtime errors from AI code can trigger a review-and-repair cycle before next retry.
+- `self.llmFunctions` and `self.createLLMFunction(...)` are passed into sandbox code paths.
 

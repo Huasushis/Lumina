@@ -1,16 +1,19 @@
+/// <reference types="node" />
+
 import {
+  AnySkill,
+  defineSkill,
   DebugRuntimeContext,
   ILLMProvider,
   LuminaContext,
   Message,
-  ProviderResponse,
-  Skill
+  ProviderResponse
 } from '../src/index.js';
 
 class MockProvider implements ILLMProvider {
   async generate(
     history: Message[],
-    _skills: Skill[],
+    _skills: AnySkill[],
     debugContext?: DebugRuntimeContext
   ): Promise<ProviderResponse> {
     const lastMessage = history[history.length - 1]?.content ?? '';
@@ -72,8 +75,7 @@ return { mode: 'eval', result, memoryLast: self.memory.lastResult };
   }
 }
 
-const addSkill: Skill = {
-  name: 'add',
+const addSkill = defineSkill('add', (a: number, b: number) => a + b, {
   description: 'Add two numbers',
   parameters: {
     type: 'object',
@@ -82,9 +84,8 @@ const addSkill: Skill = {
       b: { type: 'number' }
     },
     required: ['a', 'b']
-  },
-  execute: (a: number, b: number) => a + b
-};
+  }
+});
 
 async function main() {
   const context = new LuminaContext(

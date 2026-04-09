@@ -27,7 +27,7 @@ If API key is missing, constructor throws immediately.
 ```ts
 generate(
   history: Message[],
-  skills: Skill[],
+  skills: AnySkill[],
   debugContext?: DebugRuntimeContext
 ): Promise<ProviderResponse>
 ```
@@ -35,16 +35,18 @@ generate(
 ### Internal Flow
 
 1. Emit `provider.generate.start` debug event.
-2. Format skill list into text block for prompt injection.
-3. Build strict system instruction requiring one of:
+2. Split skills into executable tools and knowledge-only guidance.
+3. Format executable tool list and knowledge context separately for prompt injection.
+4. Build strict system instruction requiring one of:
    - `{"intent":"return","value":...}`
    - `{"intent":"eval","code":"..."}`
-4. Send request via `client.chat.completions.create(...)`.
-5. Emit `provider.response.raw` event.
-6. Parse `choices[0].message.content` as JSON.
-7. Emit `provider.response.parsed` on success.
-8. Emit `provider.response.parse_error` and throw on failure.
-9. Return parsed message + usage.
+5. Request TypeScript code for eval mode and enforce no `import/export/require` policy.
+6. Send request via `client.chat.completions.create(...)`.
+7. Emit `provider.response.raw` event.
+8. Parse `choices[0].message.content` as JSON.
+9. Emit `provider.response.parsed` on success.
+10. Emit `provider.response.parse_error` and throw on failure.
+11. Return parsed message + usage.
 
 ## Debug Events
 
@@ -63,6 +65,11 @@ generate(
 
 ## Known Limitations
 
-- Prompt currently asks for JavaScript-style code in eval mode.
-- Skill descriptions are plain text; no advanced schema-to-prompt conversion yet.
+- Skill schema injection is still text-based (no full schema compiler yet).
+
+## V2 Runtime Notes
+
+- Provider prompt now treats import/require as policy-driven (not hardcoded deny).
+- Prompt includes structured error-envelope convention for return/code paths.
+- Prompt acknowledges `self.llmFunctions.*` when available in runtime context.
 

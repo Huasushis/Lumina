@@ -1,110 +1,208 @@
 /**
- * Lumina Demo - 完整流程验证
- * 
- * 本脚本验证：
- * 1. 基本的 Return 模式（AI 直接返回结果）
- * 2. Eval 模式（AI 生成代码并在沙盒中执行）
- * 3. 上下文克隆隔离（Clone 后子实例不污染父实例）
- * 4. Skill 注入与调用
- * 5. 容错重试机制
+ * Lumina Demo - 复杂端到端场景
+ *
+ * 覆盖：
+ * 1) wrapper 模式 skill 筛选（非递归）
+ * 2) LLM 函数代码持久化 + 自动加载
+ * 3) 在生成代码内创建新的 LLM 函数并持久化
+ * 4) 新 context 重载后直接调用已持久化函数
+ * 5) 长上下文入参下的自适应参数字节策略
  */
 
-import { AliYunBailianProvider } from '../src/LLMProvider.js';
-import { LuminaContext } from '../src/LuminaContext.js';
-import { Skill } from '../src/types.js';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import {
+  AliYunBailianProvider,
+  AnySkill,
+  createSkillSelectorSkill,
+  defineLLMFunction,
+  LuminaContext,
+  SkillSelectionCandidate,
+  SkillSelectionConstraints,
+  SkillSelectionResultItem,
+  loadDefaultSkills
+} from '../src/index.js';
 
-// ===== 定义 Skills =====
+async function llmRankSkills(
+  provider: AliYunBailianProvider,
+  query: string,
+  candidates: SkillSelectionCandidate[],
+  constraints: SkillSelectionConstraints = {}
+): Promise<SkillSelectionResultItem[]> {
+  const prompt = [
+    '[DEMO_SKILL_SELECTOR_QUERY]',
+    `query=${query}`,
+    `constraints=${JSON.stringify(constraints)}`,
+    `candidates=${JSON.stringify(candidates)}`,
+    'Return JSON: {"intent":"return", "value":{"selected":[{"name":"...","score":0-100,"reason":"..."}]}}',
+    'Only use candidate names.'
+  ].join('\n');
 
-const addSkill: Skill = {
-  name: 'add',
-  description: '将两个数字相加。参数: a (number), b (number)。返回 a + b 的结果。',
-  parameters: {
-    type: 'object',
-    properties: {
-      a: { type: 'number' },
-      b: { type: 'number' }
-    },
-    required: ['a', 'b']
-  },
-  execute: (a: number, b: number) => a + b
-};
+  const response = await provider.generate(
+    [{ role: 'user', content: prompt }],
+    [],
+    undefined
+  );
 
-const getCurrentTimeSkill: Skill = {
-  name: 'getCurrentTime',
-  description: '获取当前的时间戳字符串。无参数。',
-  parameters: {},
-  execute: () => new Date().toISOString()
-};
+  if (response.message.intent !== 'return') {
+    return [];
+  }
 
-// ===== 主测试流程 =====
+  const selected = (
+    response.message.value
+    && typeof response.message.value === 'object'
+    && Array.isArray((response.message.value as { selected?: unknown[] }).selected)
+      ? (response.message.value as { selected: unknown[] }).selected
+      : []
+  )
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+
+      const candidate = item as Partial<SkillSelectionResultItem>;
+      if (typeof candidate.name !== 'string' || candidate.name.length === 0) {
+        return null;
+      }
+
+      return {
+        name: candidate.name,
+        score: typeof candidate.score === 'number' ? candidate.score : 1,
+        reason: typeof candidate.reason === 'string' ? candidate.reason : 'selected by llm'
+      } as SkillSelectionResultItem;
+    })
+    .filter((item): item is SkillSelectionResultItem => item !== null)
+    .sort((a, b) => b.score - a.score);
+
+  return selected;
+}
+
 async function main() {
-  console.log('====== Lumina Demo Start ======\n');
+  console.log('====== Lumina Complex Demo Start ======\n');
 
-  // 1. 初始化 Provider & Context
   const provider = new AliYunBailianProvider({
     model: 'qwen-plus',
     enableThinking: false
   });
 
-  const ctx = new LuminaContext(provider, {}, new Map(), [], { maxRetries: 3 });
+  const persistenceFile = resolve('.lumina/functions.json');
 
-  // 注入 Skills
-  ctx.injectSkill(addSkill);
-  ctx.injectSkill(getCurrentTimeSkill);
+  const baseSkills: AnySkill[] = loadDefaultSkills({
+    executable: ['basicMath', 'time'],
+    knowledge: ['tsSandbox', 'recursive']
+  });
 
-  // ------- Test 1: Return 模式 --------
-  console.log('--- Test 1: Return 模式 (直接问答) ---');
-  try {
-    const result1 = await ctx.call('请直接告诉我 1+1 等于多少，不要写代码。');
-    console.log('Result:', JSON.stringify(result1, null, 2));
-    console.log('✓ Test 1 Passed\n');
-  } catch (e: any) {
-    console.error('✗ Test 1 Failed:', e.message, '\n');
+  const selectorSkill = createSkillSelectorSkill(
+    baseSkills,
+    (query, candidates, constraints) => llmRankSkills(provider, query, candidates, constraints)
+  );
+
+  const ctx = new LuminaContext(provider, { project: 'Lumina demo' }, new Map(), [], {
+    maxRetries: 3,
+    persistence: {
+      enabled: true,
+      autoLoad: true,
+      autoSave: true,
+      filePath: persistenceFile
+    },
+    skillFilter: {
+      enabled: true,
+      selectorSkillName: '__skillSelector',
+      topN: 4,
+      applyToLLMFunctions: true
+    }
+  });
+
+  ctx.injectSkills(...baseSkills, selectorSkill);
+
+  const summarizeTask = defineLLMFunction<[string], unknown>(ctx, {
+    name: 'summarizeTask',
+    description: 'Summarize user context and return key action items.',
+    parameters: {
+      type: 'object',
+      properties: {
+        context: { type: 'string' }
+      },
+      required: ['context']
+    },
+    adaptiveParameterBytes: true,
+    adaptiveParameterBytesMax: 1024 * 1024
+  });
+
+  const longContext = `事件日志:\n${'服务A响应抖动，排查网络与缓存。\n'.repeat(1200)}`;
+
+  console.log('--- Step 1: 触发 summarizeTask（长上下文，自适应参数） ---');
+  const summaryResult = await summarizeTask(longContext);
+  console.log('summaryResult:', JSON.stringify(summaryResult, null, 2));
+
+  console.log('\n--- Step 2: 在 eval 代码中创建内部 LLM 函数 priorityClassifier ---');
+  const dynamicCreationResult = await ctx.call([
+    '请输出 eval 代码并严格执行以下步骤：',
+    '1) 使用 await self.createLLMFunction 创建函数，name="priorityClassifier"，description="Classify incident priority"，parameters 为 {text:string}。',
+    '2) 调用 await self.llmFunctions.priorityClassifier("payment outage and critical errors")。',
+    '3) 调用 await self.skills.__skillSelector({ query: "排障+计算+时间", topN: 3 })。',
+    '4) return { createdFunction: "priorityClassifier", classification: <调用结果>, selectedSkills: <selector结果> }。'
+  ].join('\n'));
+  console.log('dynamicCreationResult:', JSON.stringify(dynamicCreationResult, null, 2));
+
+  console.log('\n--- Step 3: 检查持久化文件内容 ---');
+  if (!existsSync(persistenceFile)) {
+    throw new Error(`Persistence file not found: ${persistenceFile}`);
   }
 
-  // ------- Test 2: Eval 模式 --------
-  console.log('--- Test 2: Eval 模式 (调用 skill) ---');
-  const ctx2 = new LuminaContext(provider, {}, new Map(), [], { maxRetries: 3 });
-  ctx2.injectSkill(addSkill);
-  ctx2.injectSkill(getCurrentTimeSkill);
-  try {
-    const result2 = await ctx2.call('请使用 add 工具计算 123 + 456，然后获取当前时间，将两个结果组合返回。你必须写代码来调用 self.skills.add 和 self.skills.getCurrentTime。');
-    console.log('Result:', JSON.stringify(result2, null, 2));
-    console.log('✓ Test 2 Passed\n');
-  } catch (e: any) {
-    console.error('✗ Test 2 Failed:', e.message, '\n');
-  }
+  const persistedRaw = readFileSync(persistenceFile, 'utf8');
+  const persistedDoc = JSON.parse(persistedRaw) as {
+    functions?: Record<string, unknown>;
+  };
+  const functionNames = Object.keys(persistedDoc.functions ?? {});
+  console.log('persisted functions:', functionNames);
 
-  // ------- Test 3: Context Clone 隔离 --------
-  console.log('--- Test 3: Context Clone 隔离 ---');
-  const parentCtx = new LuminaContext(provider, { counter: 0 }, new Map(), [], { maxRetries: 3 });
-  parentCtx.injectSkill(addSkill);
-  
-  const childCtx = await parentCtx.clone();
-  childCtx.memory.counter = 999;
+  console.log('\n--- Step 4: 新建 context 验证自动加载 ---');
+  const reloadCtx = new LuminaContext(provider, {}, new Map(), [], {
+    maxRetries: 3,
+    persistence: {
+      enabled: true,
+      autoLoad: true,
+      autoSave: true,
+      filePath: persistenceFile
+    },
+    skillFilter: {
+      enabled: true,
+      selectorSkillName: '__skillSelector',
+      topN: 4,
+      applyToLLMFunctions: true
+    }
+  });
 
-  console.log('Parent memory.counter:', parentCtx.memory.counter); // should be 0
-  console.log('Child  memory.counter:', childCtx.memory.counter);  // should be 999
-  
-  if (parentCtx.memory.counter === 0 && childCtx.memory.counter === 999) {
-    console.log('✓ Test 3 Passed (memory isolation confirmed)\n');
+  reloadCtx.injectSkills(...baseSkills, selectorSkill);
+
+  const reloadSummaryResult = await reloadCtx.invokeLLMFunction(
+    'summarizeTask',
+    longContext.slice(0, 8000)
+  );
+  console.log('reload summarizeTask result:', JSON.stringify(reloadSummaryResult, null, 2));
+
+  if (functionNames.includes('priorityClassifier')) {
+    const reloadPriorityResult = await reloadCtx.invokeLLMFunction(
+      'priorityClassifier',
+      'urgent incident with production impact'
+    );
+    console.log('reload priorityClassifier result:', JSON.stringify(reloadPriorityResult, null, 2));
   } else {
-    console.error('✗ Test 3 Failed (memory leaked!)\n');
+    console.log('priorityClassifier was not persisted in this run; skip reload invoke.');
   }
 
-  // ------- Test 4: exportAsFunction --------
-  console.log('--- Test 4: exportAsFunction ---');
-  const ctx4 = new LuminaContext(provider, {}, new Map(), [], { maxRetries: 3 });
-  const fn = ctx4.exportAsFunction();
-  try {
-    const result4 = await fn('直接回答：月球距离地球大约多远（公里）？');
-    console.log('Result:', JSON.stringify(result4, null, 2));
-    console.log('✓ Test 4 Passed\n');
-  } catch (e: any) {
-    console.error('✗ Test 4 Failed:', e.message, '\n');
-  }
+  console.log('\n--- Step 5: 单独演示 selector skill 输出（Top-N + reason） ---');
+  const selectorOutput = await selectorSkill.execute({
+    query: '我需要先计算指标，再判断当前时间窗口是否需要告警',
+    topN: 3
+  });
+  console.log('selector output:', JSON.stringify(selectorOutput, null, 2));
 
-  console.log('====== Lumina Demo End ======');
+  console.log('\n====== Lumina Complex Demo End ======');
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error('Complex demo failed:', error);
+  process.exit(1);
+});

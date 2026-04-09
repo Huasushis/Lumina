@@ -8,19 +8,30 @@ This documentation set is designed to be **source-to-doc one-to-one** and detail
 |---|---|---|
 | `src/types.ts` | `docs/src.types.ts.md` | Core contracts and runtime types |
 | `src/DebugSink.ts` | `docs/src.DebugSink.ts.md` | Debug event system and sinks |
+| `src/SkillBuilder.ts` | `docs/src.SkillBuilder.ts.md` | Declarative skill and knowledge helpers |
+| `src/LLMFunction.ts` | `docs/src.LLMFunction.ts.md` | Function-like LLM invocation helper |
 | `src/LLMProvider.ts` | `docs/src.LLMProvider.ts.md` | LLM adapter and prompt/runtime contract |
 | `src/LuminaContext.ts` | `docs/src.LuminaContext.ts.md` | Main execution loop and orchestration |
 | `src/Sandbox.ts` | `docs/src.Sandbox.ts.md` | VM-based isolated code execution |
+| `src/skills/default/executable.ts` | `docs/src.skills.default.executable.ts.md` | Built-in executable skill groups |
+| `src/skills/default/knowledge.ts` | `docs/src.skills.default.knowledge.ts.md` | Built-in knowledge-only skill groups |
+| `src/skills/default/index.ts` | `docs/src.skills.default.index.ts.md` | Default skill loader and split helpers |
+| `src/skills/index.ts` | `docs/src.skills.index.ts.md` | Skills module barrel export |
 | `src/index.ts` | `docs/src.index.ts.md` | Public export surface |
 
 ## 2) Recommended Reading Order
 
 1. `docs/src.types.ts.md`
 2. `docs/src.DebugSink.ts.md`
-3. `docs/src.LLMProvider.ts.md`
-4. `docs/src.Sandbox.ts.md`
-5. `docs/src.LuminaContext.ts.md`
-6. `docs/src.index.ts.md`
+3. `docs/src.SkillBuilder.ts.md`
+4. `docs/src.LLMFunction.ts.md`
+5. `docs/src.skills.default.executable.ts.md`
+6. `docs/src.skills.default.knowledge.ts.md`
+7. `docs/src.skills.default.index.ts.md`
+8. `docs/src.LLMProvider.ts.md`
+9. `docs/src.Sandbox.ts.md`
+10. `docs/src.LuminaContext.ts.md`
+11. `docs/src.index.ts.md`
 
 ## 3) Rebuild-from-docs Checklist
 

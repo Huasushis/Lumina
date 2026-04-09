@@ -15,6 +15,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Runtime persistence artifacts
+.lumina/
+
 # Environment files
 .env
 .env.*

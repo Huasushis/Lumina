@@ -19,7 +19,14 @@ This file defines all type contracts across Lumina.
 - `DebugLoggerLike`
 - `DebugConfig`
 - `DebugRuntimeContext`
+- `SkillMetadata`
+- `ExecutableSkill`
+- `KnowledgeSkill`
 - `Skill`
+- `AnySkill`
+- `isKnowledgeSkill(...)`
+- `isExecutableSkill(...)`
+- `LuminaSandboxConfig`
 - `LuminaConfig`
 - `LLMResponse`
 - `ProviderResponse`
@@ -38,18 +45,29 @@ interface Message {
 
 Used as conversation history between context and provider.
 
-### `Skill`
+### Skill contracts
 
 ```ts
-interface Skill {
+interface ExecutableSkill {
+  kind?: 'executable';
   name: string;
   description: string;
   parameters: object;
   execute: (...args: any[]) => Promise<any> | any;
 }
+
+interface KnowledgeSkill {
+  kind: 'knowledge';
+  name: string;
+  description: string;
+  content: string;
+}
+
+type Skill = ExecutableSkill; // backward-compatible alias
+type AnySkill = ExecutableSkill | KnowledgeSkill;
 ```
 
-`parameters` is a JSON-schema-like structure used to teach the model how to call the skill.
+`parameters` is a JSON-schema-like structure for executable tools. Knowledge skills are prompt-only and not callable.
 
 ### `LLMResponse`
 
@@ -67,7 +85,7 @@ This is the **core protocol** used by `LuminaContext.call()`.
 interface ILLMProvider {
   generate(
     history: Message[],
-    skills: Skill[],
+    skills: AnySkill[],
     debugContext?: DebugRuntimeContext
   ): Promise<ProviderResponse>;
 }
@@ -94,11 +112,30 @@ Any provider implementation must output a valid `ProviderResponse` with `message
 
 1. Recreate all interfaces/types exactly.
 2. Keep `ILLMProvider.generate(...)` signature synchronized with provider implementations.
-3. Ensure `LuminaConfig` includes `debug?: DebugConfig`.
+3. Ensure `LuminaConfig` includes `debug?: DebugConfig` and `sandbox?: LuminaSandboxConfig`.
 
 ## Common Mistakes
 
 - Forgetting optional `debugContext` in `ILLMProvider.generate`.
 - Returning malformed `LLMResponse` shape from provider.
 - Using incompatible `role` values in `Message`.
+
+## V2 Runtime Additions
+
+- Import policy contract:
+  - `ImportPolicy = 'deny' | 'allowlist' | 'all'`
+  - configured under `LuminaSandboxConfig`
+- Auto-install support for missing packages:
+  - `autoInstallMissingPackages`
+  - `installProvider` / `packageRegistry`
+- Split retry policy:
+  - `retry.maxCompileRetries`
+  - `retry.maxRuntimeRetries`
+  - `retry.maxReviewRetries`
+- Function-like LLM runtime contracts:
+  - `LLMFunctionConfig`
+  - `RegisteredLLMFunction`
+  - `LLMFunctionMode`
+- Structured error envelope:
+  - `LLMErrorEnvelope` + `isLuminaErrorEnvelope(...)`
 
