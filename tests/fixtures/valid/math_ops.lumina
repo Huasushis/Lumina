@@ -1,0 +1,8 @@
+import "calculator.lumina" as calc
+
+module Adder {
+    interface: {
+        "add": { "a": Int, "b": Int } -> { "sum": Int }
+    }
+    logic: "实现加法"
+}

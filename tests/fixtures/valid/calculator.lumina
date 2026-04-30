@@ -1,0 +1,4 @@
+type CalcResult = {
+    "value": Int("计算结果"),
+    "unit": String("单位")
+}("计算结果类型")

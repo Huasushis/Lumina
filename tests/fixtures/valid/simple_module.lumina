@@ -1,0 +1,9 @@
+module Echo {
+    setup: "初始化一个空的消息缓冲区"
+
+    interface: {
+        "echo": { "text": String } -> { "text": String }
+    }
+
+    logic: "将输入的text原样返回"
+}

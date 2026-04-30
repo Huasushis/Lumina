@@ -1,0 +1,4 @@
+type Status = {
+    "code": Int("HTTP状态码"),
+    "message": String("描述信息")
+}("通用状态响应")

@@ -1,0 +1,59 @@
+// EBNF grammar for .lumina source files.
+//
+// Annotations (description strings in parentheses) are inlined directly
+// into each type rule instead of using a shared ?annotated rule, to avoid
+// LALR reduce/reduce collisions on the empty annotation case.
+
+%import common.ESCAPED_STRING -> STRING
+%import common.CNAME
+%import common.WS
+%import common.NEWLINE
+%import common.CPP_COMMENT
+
+%ignore WS
+%ignore NEWLINE
+%ignore CPP_COMMENT
+
+start: (import_stmt | type_def | module_def)*
+
+// ── Imports ────────────────────────────────────────────────
+
+import_stmt: "import" STRING "as" CNAME
+
+// ── Type definitions ──────────────────────────────────────
+
+type_def: "type" CNAME "=" type_body ("(" STRING ")")?
+
+?type_body: union_type
+
+?union_type: type_atom ("|" type_atom)*
+
+?type_atom: record_type
+          | generic_type
+          | qualified_name
+          | primitive_type
+
+record_type: "{" (record_field ("," record_field)* ","?)? "}" ("(" STRING ")")?
+
+record_field: STRING ":" type_body ("(" STRING ")")?
+
+generic_type: CNAME "<" type_body ("," type_body)* ">" ("(" STRING ")")?
+
+primitive_type: CNAME ("(" STRING ")")?
+
+qualified_name: CNAME ("." CNAME)+
+
+// ── Module definitions ─────────────────────────────────────
+
+module_def: "module" CNAME "{" (actor_decl | setup_stmt | interface_stmt | logic_stmt)* "}"
+
+module_ref: CNAME ("." CNAME)*
+actor_decl: "actor" CNAME ":" module_ref
+
+setup_stmt: "setup" ":" STRING
+
+interface_stmt: "interface" ":" "{" (STRING ":" iface_method)* "}"
+
+iface_method: record_type "->" record_type
+
+logic_stmt: "logic" ":" STRING

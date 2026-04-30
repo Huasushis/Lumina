@@ -1,0 +1,9 @@
+import "worker.lumina" as worker
+
+module SystemController {
+    actor my_sorter: worker.Sorter
+
+    setup: "启动后台协程，每隔1秒生成包含100个随机浮点数的DataPacket"
+
+    logic: "将生成的DataPacket作为raw参数调用my_sorter.do_sort，将sorted结果输出"
+}

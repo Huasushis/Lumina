@@ -1,0 +1,22 @@
+type DataPacket = {
+    "id": Int("唯一ID"),
+    "payload": List<Float>("数据序列")
+}("数据包")
+
+module Sorter {
+    setup: "分配内存池"
+
+    interface: {
+        "do_sort": { "raw": DataPacket } -> { "sorted": DataPacket }
+    }
+
+    logic: "对payload排序"
+}
+
+module Controller {
+    actor sorter: Sorter
+
+    setup: "启动定时生成器"
+
+    logic: "生成数据，调用sorter.do_sort，输出结果"
+}

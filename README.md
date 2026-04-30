@@ -1,145 +1,154 @@
 # Lumina
 
-Lumina is a lightweight TypeScript agent runtime focused on two function types only:
+**Actor Model architecture language for the AI era.**
 
-1. **TS function** (your native function)
-2. **AI function** (model-backed function via `defineLLMFunction`)
+Define your system as a set of actors that communicate through JSON messages. Each actor is a black box — you describe *what* it does in natural language, and AI agents implement *how* it works. The compiler wires everything together.
 
-No function store. No built-in skill filter pipeline. No generated-code persistence.
-
-## What this runtime does
-
-- `call(...)` supports dual intent:
-  - `return`: model returns final value directly
-  - `eval`: model returns TypeScript code, executed in sandbox
-- AI function call keeps a two-step flow on each invocation:
-  - mode negotiation (`return` or `code`)
-  - execute selected mode
-- Retry/error mechanism remains for compile/runtime/review paths.
-
-## Core idea for TS functions
-
-Define a normal TypeScript function, and Lumina automatically appends a final `llmContext` parameter at runtime:
-
-- `history`
-- `skills`
-- `provider`
-
-So you can write your business args cleanly and still access LLM runtime context when needed.
-
-## Installation
-
-```bash
-pnpm install
+```
+.lumina source  →  LMC compiler  →  AI agents  →  working code
+                     (parser)       (LLM / Claude)   (Python monolith or Docker microservices)
 ```
 
-## Environment
+---
 
-Create `.env`:
+## Why Lumina?
 
-```env
-DASHSCOPE_API_KEY=your_dashscope_api_key_here
-```
+AI is great at writing isolated functions with clear contracts. AI fails when it has to understand global system topology, complex control flow, and implicit dependencies.
 
-## Provider options
+**Lumina solves this**: every module is an independent actor with exactly two entry points — `run()` and `invoke()`. The AI only needs to satisfy a JSON interface contract. It never sees the global system. The compiler handles wiring, message routing, and deployment.
 
-```ts
-new AliYunBailianProvider({
-  model: 'qwen-plus',
-  enableThinking: false,
-  additionalModelParams: {
-    temperature: 0.2
-  }
-})
-```
+> *Erlang OTP architecture × LLM code generation.*
 
-- `enableThinking`: thinking switch
-- `additionalModelParams`: passthrough params to model request
+---
 
-## Minimal usage
+## Quick Example
 
-```ts
-import {
-  AliYunBailianProvider,
-  defineLLMFunction,
-  LuminaContext,
-  TSFunctionLLMContext
-} from './src/index.js';
+```rust
+// types.lumina — shared type definitions
+type DataPacket = {
+    "id": Int("unique timestamp ID"),
+    "payload": List<Float>("sequence of floats to process")
+}("standard data stream packet")
 
-const provider = new AliYunBailianProvider({ model: 'qwen-plus' });
-const ctx = new LuminaContext(provider, {}, new Map(), [], { maxRetries: 3 });
+// worker.lumina — an actor module
+import "types.lumina" as t
 
-// 1) TS function: auto append llmContext at runtime
-const addWithContext = ctx.defineTSFunction(
-  'addWithContext',
-  async (a: number, b: number, llmContext: TSFunctionLLMContext) => {
-    return {
-      sum: a + b,
-      historyLength: llmContext.history.length
-    };
-  },
-  {
-    description: 'Add two numbers',
-    parameters: {
-      type: 'object',
-      properties: {
-        a: { type: 'number' },
-        b: { type: 'number' }
-      },
-      required: ['a', 'b']
+module Sorter {
+    setup: "allocate a memory pool for high-frequency sorting"
+
+    interface: {
+        "do_sort": { "raw": t.DataPacket } -> { "sorted": t.DataPacket }
     }
-  }
-);
 
-// 2) AI function: mode negotiation per call (return/code)
-const summarize = defineLLMFunction<[string], unknown>(ctx, {
-  name: 'summarize',
-  description: 'Summarize report text',
-  parameters: {
-    type: 'object',
-    properties: {
-      report: { type: 'string' }
-    },
-    required: ['report']
-  }
-});
+    logic: "implement a non-recursive quicksort on payload, keep id unchanged"
+}
 
-const tsResult = await addWithContext(1, 2);
-const aiResult = await summarize('incident report text');
+// main.lumina — system composition
+import "worker.lumina" as worker
 
-console.log(tsResult, aiResult);
+module Controller {
+    actor sorter: worker.Sorter
+
+    setup: "start a background coroutine that generates 100 random floats every second"
+
+    logic: "pipe generated DataPackets to sorter.do_sort, output sorted results"
+}
 ```
 
-## Standalone selector skill (optional)
+Every string in `()` is **not a comment** — it's a first-class semantic description that gets compiled into the Task JSON sent to AI agents.
 
-Selector is a normal skill, not a built-in Context pipeline.
+---
 
-```ts
-import { createSkillSelectorSkill } from './src/index.js';
-
-const selector = createSkillSelectorSkill(Array.from(ctx.skills.values()));
-ctx.injectSkill(selector);
-
-const selected = await selector.execute({
-  query: 'need math and current time',
-  topN: 3
-});
-```
-
-## Scripts
+## Quick Start
 
 ```bash
-pnpm build
-npx tsx examples/demo.ts
-npx tsx examples/llm-function-basic.ts
-npx tsx examples/default-skills.ts
+# Install
+pip install lmc          # coming soon
+# or: git clone + uv sync
+
+# Create a project
+lmc init hello-world
+cd hello-world
+
+# See what will be generated
+lmc build --dry-run
+
+# Build with LLM agent (needs OPENAI_API_KEY)
+lmc build
+
+# Build with Claude Code (needs claude CLI)
+lmc build --agent claude_code
 ```
 
-## Notes
+## Project Structure
 
-- AI generated code is not persisted.
-- AI generated code is regenerated per invocation in code mode.
-- Selector remains explicit and user-controlled.
+```
+my-project/
+├── Lumina.toml         # project manifest
+├── src/
+│   ├── main.lumina     # entry point
+│   └── types.lumina    # shared types
+├── .lumina/            # build cache (gitignored)
+└── .gitignore
+```
+
+---
+
+## Key Features
+
+- **Semantic Types**: types carry natural-language descriptions that AI agents use as context. Not comments — compiler-verified metadata.
+- **Actor Modules**: every module is an isolated actor with `run()` + `invoke()`. No shared state, no global imports.
+- **Pluggable AI Backends**: use OpenAI-compatible LLMs for generation, or Claude Code CLI for generation + automated testing.
+- **Per-Module Testing**: enable `test = true` for specific modules in `Lumina.toml`. The agent generates and runs tests.
+- **Dual Build Modes**: `monolith` produces a single process with in-memory message routing. `microservice` generates Dockerfiles and `docker-compose.yml`.
+- **Incremental Builds**: unchanged modules are cached and skipped.
+
+---
+
+## Agent Configuration
+
+Agent settings live in environment variables, not in the project manifest:
+
+```bash
+export LUMINA_AGENT=llm              # "llm" (default) or "claude_code"
+export OPENAI_API_KEY=sk-xxx         # for LLM agent
+export LUMINA_MODEL=gpt-4o           # optional model override
+```
+
+Per-module testing in `Lumina.toml`:
+
+```toml
+[modules.Sorter]
+test = true   # Claude Code agent will generate + run tests for this module
+```
+
+---
+
+## How It Works
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────┐
+│ .lumina     │ ──► │ LMC Parser   │ ──► │ Task JSON   │ ──► │ AI Agent │
+│ source      │     │ (Lark EBNF)  │     │ (per actor) │     │ (LLM/CC) │
+└─────────────┘     └──────────────┘     └─────────────┘     └─────┬────┘
+                                                                   │
+                                                              generated code
+                                                                   │
+                                              ┌────────────────────┘
+                                              ▼
+┌──────────┐     ┌──────────────┐
+│ Output   │ ◄── │ LMC Builder  │
+│ ./build  │     │ mono/micro   │
+└──────────┘     └──────────────┘
+```
+
+---
+
+## Status
+
+**Pre-release.** The compiler pipeline is implemented (parser, analyzer, task generator, agent backends, builders). CLI commands `init`, `build`, `parse` are functional. SDK base classes and runtime are in progress.
+
+---
 
 ## License
 

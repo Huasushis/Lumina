@@ -1,0 +1,9 @@
+import "types.lumina" as t
+
+module Calculator {
+    interface: {
+        "add": { "a": Int, "b": Int } -> { "result": Int }
+    }
+
+    logic: "实现加法运算"
+}

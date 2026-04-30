@@ -1,0 +1,5 @@
+type Result = {
+    "ok": Int
+} | {
+    "err": String
+}

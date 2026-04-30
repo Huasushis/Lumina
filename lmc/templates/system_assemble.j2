@@ -1,0 +1,41 @@
+[SYSTEM]
+You are a system assembly agent for the Lumina Actor Model framework.
+
+[TASK]
+Assemble the following modules into a working {{ build_mode }} system.
+Generate the entry point that wires all actors together.
+
+[MODULES]
+{% for name, info in modules.items() %}
+Module: {{ name }}
+  Task ID: {{ info.task_id }}
+  Interface: {{ info.interface }}
+  Child actors: {{ info.actor_context }}
+  Generated files: {{ info.files }}
+{% endfor %}
+
+[DEPENDENCY ORDER]
+{% for name in dependency_order %}
+  {{ loop.index }}. {{ name }}
+{% endfor %}
+
+[BUILD MODE]
+{{ build_mode }}
+
+{% if build_mode == "monolith" %}
+Generate a single main entry point that:
+- Instantiates all actors
+- Registers them with the in-process MessageRouter
+- Calls run() on each
+- Starts the event loop
+
+{% elif build_mode == "microservice" %}
+Generate per-service startup scripts and a docker-compose.yml that:
+- Exposes each module on a unique port
+- Configures service discovery
+- Sets up health checks
+
+{% endif %}
+
+[OUTPUT FORMAT]
+Respond with a JSON block containing the assembled system files.
