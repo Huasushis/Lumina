@@ -16,23 +16,23 @@ def resolver():
 
 
 def test_resolve_single_file(resolver):
-    prog = resolver.resolve(FIXTURES / "simple_module.lumina")
+    prog = resolver.resolve(FIXTURES / "simple_module.lm")
     assert "Echo" in prog.module_registry
     assert prog.module_registry["Echo"].setup is not None
 
 
 def test_resolve_with_import(resolver):
-    prog = resolver.resolve(FIXTURES / "math_ops.lumina")
+    prog = resolver.resolve(FIXTURES / "math_ops.lm")
     assert "Adder" in prog.module_registry
     assert "CalcResult" in prog.type_registry
-    assert str(FIXTURES / "math_ops.lumina") in prog.import_map
+    assert str(FIXTURES / "math_ops.lm") in prog.import_map
 
 
 def test_circular_import_detected(resolver, tmp_path):
-    a = tmp_path / "a.lumina"
-    b = tmp_path / "b.lumina"
-    a.write_text('import "b.lumina" as b\nmodule A {}', encoding="utf-8")
-    b.write_text('import "a.lumina" as a\nmodule B {}', encoding="utf-8")
+    a = tmp_path / "a.lm"
+    b = tmp_path / "b.lm"
+    a.write_text('import "b.lm" as b\nmodule A {}', encoding="utf-8")
+    b.write_text('import "a.lm" as a\nmodule B {}', encoding="utf-8")
     with pytest.raises(LuminaResolveError, match="Circular"):
         resolver.resolve(a)
 
@@ -40,6 +40,6 @@ def test_circular_import_detected(resolver, tmp_path):
 def test_import_not_found(resolver):
     with pytest.raises(LuminaResolveError, match="Import not found"):
         resolver.parse_and_resolve(
-            'import "does_not_exist.lumina" as x\nmodule Test {}',
-            "test.lumina",
+            'import "does_not_exist.lm" as x\nmodule Test {}',
+            "test.lm",
         )

@@ -146,9 +146,9 @@ def init_project(name: str, path: Path | None = None) -> Path:
     (root / ".gitignore").write_text(GITIGNORE_CONTENT, encoding="utf-8")
 
     # Default source files
-    (src / "types.lumina").write_text(
+    (src / "types.lm").write_text(
         DEFAULT_TYPES.format(name=name), encoding="utf-8")
-    (src / "main.lumina").write_text(
+    (src / "main.lm").write_text(
         DEFAULT_MAIN.format(name=name), encoding="utf-8")
 
     return root

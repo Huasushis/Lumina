@@ -1,4 +1,4 @@
-"""Tests for .lumina parser."""
+"""Tests for .lm parser."""
 
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ def _parse(parser, name):
 
 
 def test_simple_type(parser):
-    decls = _parse(parser, "simple_type.lumina")
+    decls = _parse(parser, "simple_type.lm")
     assert len(decls) == 1
     td = decls[0]
     assert isinstance(td, TypeDef)
@@ -52,7 +52,7 @@ def test_simple_type(parser):
 
 
 def test_simple_module(parser):
-    decls = _parse(parser, "simple_module.lumina")
+    decls = _parse(parser, "simple_module.lm")
     assert len(decls) == 1
     mod = decls[0]
     assert isinstance(mod, Module)
@@ -63,11 +63,11 @@ def test_simple_module(parser):
 
 
 def test_with_import(parser):
-    decls = _parse(parser, "with_import.lumina")
+    decls = _parse(parser, "with_import.lm")
     assert len(decls) == 2
     imp = decls[0]
     assert isinstance(imp, Import)
-    assert imp.path == "types.lumina"
+    assert imp.path == "types.lm"
     assert imp.alias == "t"
     mod = decls[1]
     assert isinstance(mod, Module)
@@ -75,7 +75,7 @@ def test_with_import(parser):
 
 
 def test_full_system(parser):
-    decls = _parse(parser, "full_system.lumina")
+    decls = _parse(parser, "full_system.lm")
     # TypeDef, Sorter module, Controller module
     assert len(decls) == 3
     td = decls[0]
@@ -92,7 +92,7 @@ def test_full_system(parser):
 
 
 def test_union_type(parser):
-    decls = _parse(parser, "union_type.lumina")
+    decls = _parse(parser, "union_type.lm")
     assert len(decls) == 1
     td = decls[0]
     assert isinstance(td.body, UnionType)
@@ -105,7 +105,7 @@ def test_union_type(parser):
 
 def test_missing_type_parses_anyway(parser):
     """UnknownType is parsed as a PrimitiveType — semantic check is later."""
-    decls = _parse(parser, "missing_type.lumina")
+    decls = _parse(parser, "missing_type.lm")
     assert len(decls) == 1
 
 
@@ -113,5 +113,5 @@ def test_missing_type_parses_anyway(parser):
 
 def test_unexpected_token(parser):
     with pytest.raises(LuminaParseError) as exc:
-        parser.parse("module { broken", "test.lumina")
-    assert "test.lumina" in str(exc.value)
+        parser.parse("module { broken", "test.lm")
+    assert "test.lm" in str(exc.value)

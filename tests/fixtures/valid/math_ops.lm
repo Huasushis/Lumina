@@ -1,4 +1,4 @@
-import "calculator.lumina" as calc
+import "calculator.lm" as calc
 
 module Adder {
     interface: {

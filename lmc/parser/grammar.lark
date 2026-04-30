@@ -1,4 +1,4 @@
-// EBNF grammar for .lumina source files.
+// EBNF grammar for .lm source files.
 //
 // Annotations (description strings in parentheses) are inlined directly
 // into each type rule instead of using a shared ?annotated rule, to avoid

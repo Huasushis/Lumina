@@ -1,4 +1,4 @@
-import "types.lumina" as t
+import "types.lm" as t
 
 module Calculator {
     interface: {

@@ -1,4 +1,4 @@
-"""Import and type resolution for .lumina source files."""
+"""Import and type resolution for .lm source files."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ class ResolvedProgram:
 
 
 class Resolver:
-    """Resolves imports, types, and actor references across .lumina files."""
+    """Resolves imports, types, and actor references across .lm files."""
 
     def __init__(self, parser: LuminaParser | None = None):
         self._parser = parser or LuminaParser()
@@ -115,7 +115,7 @@ class Resolver:
         """Parse inline source and resolve. Useful for testing."""
         import tempfile, os
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".lumina", delete=False,
+            mode="w", suffix=".lm", delete=False,
             encoding="utf-8", dir=os.getcwd(),
         ) as f:
             f.write(source)

@@ -5,7 +5,7 @@
 Define your system as a set of actors that communicate through JSON messages. Each actor is a black box — you describe *what* it does in natural language, and AI agents implement *how* it works. The compiler wires everything together.
 
 ```
-.lumina source  →  LMC compiler  →  AI agents  →  working code
+.lm source  →  LMC compiler  →  AI agents  →  working code
                      (parser)       (LLM / Claude)   (Python monolith or Docker microservices)
 ```
 
@@ -24,14 +24,14 @@ AI is great at writing isolated functions with clear contracts. AI fails when it
 ## Quick Example
 
 ```rust
-// types.lumina — shared type definitions
+// types.lm — shared type definitions
 type DataPacket = {
     "id": Int("unique timestamp ID"),
     "payload": List<Float>("sequence of floats to process")
 }("standard data stream packet")
 
-// worker.lumina — an actor module
-import "types.lumina" as t
+// worker.lm — an actor module
+import "types.lm" as t
 
 module Sorter {
     setup: "allocate a memory pool for high-frequency sorting"
@@ -43,8 +43,8 @@ module Sorter {
     logic: "implement a non-recursive quicksort on payload, keep id unchanged"
 }
 
-// main.lumina — system composition
-import "worker.lumina" as worker
+// main.lm — system composition
+import "worker.lm" as worker
 
 module Controller {
     actor sorter: worker.Sorter
@@ -63,21 +63,21 @@ Every string in `()` is **not a comment** — it's a first-class semantic descri
 
 ```bash
 # Install
-pip install lmc          # coming soon
+pip install lumina          # coming soon
 # or: git clone + uv sync
 
 # Create a project
-lmc init hello-world
+lumina init hello-world
 cd hello-world
 
 # See what will be generated
-lmc build --dry-run
+lumina build --dry-run
 
 # Build with LLM agent (needs OPENAI_API_KEY)
-lmc build
+lumina build
 
 # Build with Claude Code (needs claude CLI)
-lmc build --agent claude_code
+lumina build --agent claude_code
 ```
 
 ## Project Structure
@@ -86,9 +86,9 @@ lmc build --agent claude_code
 my-project/
 ├── Lumina.toml         # project manifest
 ├── src/
-│   ├── main.lumina     # entry point
-│   └── types.lumina    # shared types
-├── .lumina/            # build cache (gitignored)
+│   ├── main.lm     # entry point
+│   └── types.lm    # shared types
+├── .lm/            # build cache (gitignored)
 └── .gitignore
 ```
 
@@ -128,7 +128,7 @@ test = true   # Claude Code agent will generate + run tests for this module
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐     ┌──────────┐
-│ .lumina     │ ──► │ LMC Parser   │ ──► │ Task JSON   │ ──► │ AI Agent │
+│ .lm     │ ──► │ LMC Parser   │ ──► │ Task JSON   │ ──► │ AI Agent │
 │ source      │     │ (Lark EBNF)  │     │ (per actor) │     │ (LLM/CC) │
 └─────────────┘     └──────────────┘     └─────────────┘     └─────┬────┘
                                                                    │

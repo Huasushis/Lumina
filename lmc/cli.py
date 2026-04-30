@@ -1,7 +1,6 @@
-"""LMC CLI — Lumina Master Compiler."""
+"""LMC CLI — Lumina compiler."""
 
 import json
-import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -16,12 +15,12 @@ from lmc.config import get_agent_config
 from lmc.parser.parser import LuminaParser
 from lmc.project import find_project_root, find_src_dir, init_project, parse_manifest
 
-app = typer.Typer(help="Lumina Master Compiler", no_args_is_help=True)
+app = typer.Typer(help="Lumina compiler", no_args_is_help=True)
 
 
 @app.callback()
 def callback():
-    """Lumina Master Compiler — parse .lumina files and build systems."""
+    """Lumina compiler — parse .lm files and build systems."""
 
 
 # ── init ──────────────────────────────────────────────────────
@@ -42,11 +41,11 @@ def init(
 
     typer.echo(f"Created Lumina project '{name}' at {root}")
     typer.echo(f"  Lumina.toml  — project manifest")
-    typer.echo(f"  src/main.lumina — entry point")
-    typer.echo(f"  src/types.lumina — shared types")
+    typer.echo(f"  src/main.lm — entry point")
+    typer.echo(f"  src/types.lm — shared types")
     typer.echo(f"  .gitignore    — auto-generated")
     typer.echo()
-    typer.echo(f"Next: cd {name} && lmc build")
+    typer.echo(f"Next: cd {name} && lumina build")
 
 
 # ── build ─────────────────────────────────────────────────────
@@ -62,12 +61,11 @@ def build(
                           help="Agent: llm or claude_code")] = "",
 ):
     """Build the Lumina project in the current directory."""
-    # Find project root
     root = find_project_root()
     if root is None:
         typer.echo(
             "Error: no Lumina.toml found. "
-            "Run 'lmc init <name>' to create a project, "
+            "Run 'lumina init <name>' to create a project, "
             "or run this command inside a Lumina project directory.",
             err=True,
         )
@@ -75,7 +73,7 @@ def build(
 
     manifest = parse_manifest(root / "Lumina.toml")
     src_dir = find_src_dir(root)
-    main_file = src_dir / "main.lumina"
+    main_file = src_dir / "main.lm"
 
     if not main_file.exists():
         typer.echo(f"Error: entry point not found: {main_file}", err=True)
@@ -84,12 +82,10 @@ def build(
     typer.echo(f"Project: {manifest.name}")
     typer.echo(f"Source:  {src_dir}")
 
-    # Resolve agent
     agent_cfg = get_agent_config()
     if agent_type:
         agent_cfg.type = agent_type
 
-    # Resolve (validate the project parses correctly)
     parser = LuminaParser()
     resolver = Resolver(parser)
     prog = resolver.resolve(main_file)
@@ -124,11 +120,9 @@ def build(
             typer.echo()
         return
 
-    # Select agent
     if agent_cfg.type == "claude_code":
         from lmc.agents.claude_code import ClaudeCodeAgent
-        from lmc.config import AgentConfig
-        agent = ClaudeCodeAgent(agent_cfg)  # type: ignore
+        agent = ClaudeCodeAgent(agent_cfg)
     else:
         from lmc.agents.llm import LLMAgent, AgentLLMConfig
         llm_cfg = AgentLLMConfig(
@@ -160,11 +154,11 @@ def build(
 
 @app.command()
 def parse_cmd(
-    file: Annotated[Path, typer.Argument(help="Path to .lumina source file")],
+    file: Annotated[Path, typer.Argument(help="Path to .lm source file")],
     fmt: Annotated[str, typer.Option("--format", "-f",
                    help="Output: ast or json")] = "ast",
 ):
-    """Parse a .lumina file and print the AST or Task JSON."""
+    """Parse a .lm file and print the AST or Task JSON."""
     parser = LuminaParser()
     path = file.resolve()
 

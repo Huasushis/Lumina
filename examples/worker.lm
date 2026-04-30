@@ -1,4 +1,4 @@
-import "types.lumina" as t
+import "types.lm" as t
 
 module Sorter {
     setup: "分配一块连续的内存池用于高频排序"

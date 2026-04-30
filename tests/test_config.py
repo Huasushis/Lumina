@@ -45,8 +45,8 @@ test = true
 def test_init_project(tmp_path):
     root = init_project("hello", tmp_path)
     assert (root / "Lumina.toml").exists()
-    assert (root / "src" / "main.lumina").exists()
-    assert (root / "src" / "types.lumina").exists()
+    assert (root / "src" / "main.lm").exists()
+    assert (root / "src" / "types.lm").exists()
     assert (root / ".gitignore").exists()
     m = parse_manifest(root / "Lumina.toml")
     assert m.name == "hello"

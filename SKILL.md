@@ -1,27 +1,27 @@
 ---
 name: lumina-lang
-description: Teach AI agents how to read, write, and reason about .lumina files — the Actor Model architecture definition language. Use when designing .lumina types, modules, interfaces, or system composition; when generating implementation code from Task JSON; or when explaining Lumina concepts.
+description: Teach AI agents how to read, write, and reason about .lm files — the Actor Model architecture definition language. Use when designing .lm types, modules, interfaces, or system composition; when generating implementation code from Task JSON; or when explaining Lumina concepts.
 ---
 
 # Lumina Language Skill
 
 ## What Lumina Is
 
-Lumina is NOT a programming language. It's an **architecture definition language**. `.lumina` files describe a system as a collection of actors that communicate through JSON messages. There is no control flow, no implementation logic, and no runtime behavior in the language itself.
+Lumina is NOT a programming language. It's an **architecture definition language**. `.lm` files describe a system as a collection of actors that communicate through JSON messages. There is no control flow, no implementation logic, and no runtime behavior in the language itself.
 
 Your job as an AI is to:
-1. **Read** `.lumina` files and understand the system architecture they describe
-2. **Write** `.lumina` files that define types, modules, and system composition
+1. **Read** `.lm` files and understand the system architecture they describe
+2. **Write** `.lm` files that define types, modules, and system composition
 3. **Generate** implementation code from Task JSON (the compiler's intermediate representation)
 
 ## Language Syntax
 
 ### File Structure
 
-A `.lumina` file is a sequence of imports, type definitions, and module definitions:
+A `.lm` file is a sequence of imports, type definitions, and module definitions:
 
 ```
-import "path/to/file.lumina" as alias
+import "path/to/file.lm" as alias
 
 type TypeName = type_expression ("semantic description")?
 
@@ -33,8 +33,8 @@ module ModuleName {
 ### Imports
 
 ```rust
-import "types.lumina" as t
-import "db/postgres.lumina" as db
+import "types.lm" as t
+import "db/postgres.lm" as db
 ```
 
 The alias becomes a namespace. Reference imported definitions with `alias.Name`.
@@ -119,7 +119,7 @@ Write implementation code that **matches the semantic intent**, not just the typ
 
 All inter-actor communication goes through `send_message(target, method, params)`. Even in monolith mode where actors are in the same process, the interface is the same. This ensures that code generated for one mode works in the other without changes.
 
-## Writing Good .lumina Files
+## Writing Good .lm Files
 
 ### Type Design
 
@@ -139,9 +139,9 @@ All inter-actor communication goes through `send_message(target, method, params)
 
 ### System Composition
 
-- Put shared types in a `types.lumina` file.
+- Put shared types in a `types.lm` file.
 - Put each module in its own file if it has significant logic.
-- Use `main.lumina` as the composition root — it mounts actors and defines the top-level flow.
+- Use `main.lm` as the composition root — it mounts actors and defines the top-level flow.
 - The entry point module typically has no `interface` (it's a spontaneous orchestrator).
 
 ## Common Patterns

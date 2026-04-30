@@ -1,40 +1,40 @@
-# Dependencies
-node_modules/
-.pnpm-store/
-
-# Build artifacts
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
 dist/
-coverage/
-*.tsbuildinfo
+*.egg-info/
 
-# Logs
-logs/
-*.log
-pnpm-debug.log*
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Runtime persistence artifacts
+# Lumina build output
 .lumina/
 
-# Environment files
+# Environment
 .env
 .env.*
 !.env.example
 
-# Local reference material (do not commit)
-reference/
-
-# Report build outputs
-report/
-
-# Editor & IDE
+# Local config (IDE, Claude Code local overrides)
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 
-# OS files
+# Reference material / design docs
+reference/
+report/
+description.md
+old.md
+CLAUDE.md
+
+# OS
 .DS_Store
 Thumbs.db
+
+# Legacy (old Node.js project)
+node_modules/
+.pnpm-store/
+*.tsbuildinfo
+logs/
+*.log

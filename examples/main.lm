@@ -1,4 +1,4 @@
-import "worker.lumina" as worker
+import "worker.lm" as worker
 
 module SystemController {
     actor my_sorter: worker.Sorter

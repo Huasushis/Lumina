@@ -27,7 +27,7 @@ dev = [
 ]
 
 [project.scripts]
-lmc = "lmc.cli:app"
+lumina = "lmc.cli:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["lmc"]
