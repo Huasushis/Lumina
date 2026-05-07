@@ -76,7 +76,8 @@ class ClaudeCodeAgent(AgentBackend):
 
         try:
             result = subprocess.run(
-                [self._cli, "-p", prompt, "--output-format", "text"],
+                [self._cli, "-p", prompt, "--output-format", "text",
+                 "--dangerously-skip-permissions"],
                 cwd=str(work_dir),
                 capture_output=True,
                 text=True,

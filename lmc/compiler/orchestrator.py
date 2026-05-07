@@ -162,8 +162,8 @@ def _hash_module(module, prog, graph) -> str:
         h.update(module.logic.encode())
     for m, spec in sorted(module.interface.items()):
         h.update(m.encode())
-        h.update(str(spec.input_schema).encode())
-        h.update(str(spec.output_schema).encode())
+        h.update(str(spec.input_fields).encode())
+        h.update(str(spec.output_fields).encode())
     for dep in sorted(graph.dependencies_of(module.name)):
         h.update(dep.encode())
     return h.hexdigest()

@@ -50,15 +50,26 @@ class Resolver:
                    loading: set[Path] | None = None) -> SourceFile:
         if loading is None:
             loading = set()
-        if path in loading:
-            raise LuminaResolveError(
-                f"Circular import detected for '{path}'", str(path))
 
+        # Return cached result if already fully loaded
         path_str = str(path)
         if path_str in prog.source_files:
             return prog.source_files[path_str]
 
+        # Detect circular import: this file is already being loaded
+        # somewhere up the import chain
+        if path in loading:
+            raise LuminaResolveError(
+                f"Circular import detected for '{path}'", str(path))
+
         loading.add(path)
+        try:
+            return self._load_file_impl(path, prog, loading, path_str)
+        finally:
+            loading.discard(path)
+
+    def _load_file_impl(self, path: Path, prog: ResolvedProgram,
+                        loading: set[Path], path_str: str) -> SourceFile:
 
         sf = SourceFile(
             path=path,
@@ -77,15 +88,12 @@ class Resolver:
             elif isinstance(decl, Module):
                 sf.modules.append(decl)
 
-        prog.source_files[path_str] = sf
-
-        # Register types and modules
+        # Register types and modules early (needed for self-referential checks)
         for td in sf.types:
             key = td.name
             if key in prog.type_registry:
                 raise LuminaResolveError(
-                    f"Duplicate type '{key}' — already defined in "
-                    f"'{prog.type_registry[key].location}'", str(path))
+                    f"Duplicate type '{key}'", str(path))
             prog.type_registry[key] = td
 
         for mod in sf.modules:
@@ -95,7 +103,9 @@ class Resolver:
                     f"Duplicate module '{key}'", str(path))
             prog.module_registry[key] = mod
 
-        # Resolve imports recursively
+        # Resolve imports recursively BEFORE registering in source_files.
+        # This way, if an import leads back to the current file, it won't
+        # be in source_files and the circular import check will fire.
         import_map: dict[str, str] = {}
         base_dir = path.parent
         for imp in sf.imports:
@@ -106,6 +116,9 @@ class Resolver:
                     f"(resolved to '{import_path}')", str(path))
             self._load_file(import_path, prog, loading)
             import_map[imp.alias] = str(import_path)
+
+        # NOW register in source_files — all imports resolved without cycles
+        prog.source_files[path_str] = sf
         prog.import_map[path_str] = import_map
 
         return sf
