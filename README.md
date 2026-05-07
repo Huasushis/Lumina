@@ -63,8 +63,7 @@ Every string in `()` is **not a comment** — it's a first-class semantic descri
 
 ```bash
 # Install
-pip install lumina          # coming soon
-# or: git clone + uv sync
+pip install lumina-lang
 
 # Create a project
 lumina init hello-world
