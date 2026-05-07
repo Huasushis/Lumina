@@ -1,0 +1,6 @@
+[project]
+name = "guess-game"
+language = "python"
+
+[build]
+mode = "monolith"

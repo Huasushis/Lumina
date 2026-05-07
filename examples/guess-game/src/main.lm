@@ -1,0 +1,15 @@
+import "types.lm" as t
+import "decision.lm" as d
+
+module GameUI {
+    actor engine: d.DecisionEngine
+
+    setup: "start the game with min=1, max=100, max_attempts=7. display welcome message"
+
+    interface: {
+        "submit_guess": { "value": Int } -> { "result": t.GuessResult }
+        "new_game": { "config": t.GameConfig } -> { "ok": String }
+    }
+
+    logic: "receive user guess -> call engine.guess -> display hint -> if won, congratulate. if out of attempts, reveal the answer"
+}

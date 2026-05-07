@@ -1,0 +1,12 @@
+import "types.lm" as t
+
+module DecisionEngine {
+    setup: "generate a random secret number within the configured range, initialize attempt counter"
+
+    interface: {
+        "guess": { "guess": t.Guess } -> { "result": t.GuessResult }
+        "reset": { "config": t.GameConfig } -> { "ok": String }
+    }
+
+    logic: "compare the guess to the secret number. return 'higher' if guess < secret, 'lower' if guess > secret, 'correct' if equal. track attempts and reject if over max_attempts"
+}

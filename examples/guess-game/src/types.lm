@@ -1,0 +1,17 @@
+type Guess = {
+    "value": Int("玩家猜测的数字"),
+    "attempt": Int("第几次尝试")
+}("玩家的一次猜测")
+
+type GuessResult = {
+    "hint": String("higher, lower 或 correct"),
+    "attempts": Int("已用尝试次数"),
+    "max_attempts": Int("最大尝试次数"),
+    "won": Bool("是否猜中")
+}("猜测结果")
+
+type GameConfig = {
+    "min": Int("最小数字"),
+    "max": Int("最大数字"),
+    "max_attempts": Int("最大尝试次数")
+}("游戏配置")
