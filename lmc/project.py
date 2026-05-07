@@ -30,6 +30,7 @@ class ModuleOverride:
 @dataclass
 class BuildSection:
     mode: str = "monolith"  # "monolith" | "microservice"
+    assemble: str | None = None  # natural language custom assembly instruction
 
 
 @dataclass
@@ -53,7 +54,10 @@ def parse_manifest(path: Path) -> LuminaManifest:
     return LuminaManifest(
         name=proj.get("name", path.parent.name),
         language=proj.get("language", "python"),
-        build=BuildSection(mode=build_raw.get("mode", "monolith")),
+        build=BuildSection(
+            mode=build_raw.get("mode", "monolith"),
+            assemble=build_raw.get("assemble"),
+        ),
         modules={
             name: ModuleOverride(test=cfg.get("test", False))
             for name, cfg in modules_raw.items()
@@ -98,6 +102,7 @@ language = "python"
 
 [build]
 mode = "monolith"
+# assemble = "生成一个命令行工具，从 stdin 读取 JSON，输出到 stdout"
 
 # Per-module overrides (optional):
 # [modules.MyModule]

@@ -173,6 +173,40 @@ A module should do **one thing well**. If your `logic` description starts listin
 
 Define every method the module responds to. The interface is the contract — the AI agent implements exactly those methods. If a method isn't listed, it won't be implemented.
 
+## Build Output
+
+`lumina build` produces a runnable system:
+
+```
+.lumina/build/
+├── _runtime/
+│   └── lumina_actor.py       # Runtime base class + MessageRouter
+├── Module1/
+│   └── module1.py            # AI-generated actor implementation
+├── Module2/
+│   └── module2.py
+├── main.py                   # Auto-generated entry point
+└── cache.json                # Incremental build cache
+```
+
+Run with: `python .lumina/build/main.py` (or `npx tsx .lumina/build/main.ts` for TypeScript).
+
+### Custom Assembly
+
+Add an `assemble` field in `Lumina.toml` for custom assembly instructions:
+
+```toml
+[build]
+mode = "monolith"
+assemble = "生成一个 HTTP API 服务器，/chat 路由接收 JSON，流式返回 SSE"
+```
+
+When set, the assemble instruction is sent to the AI agent with the system topology for custom wiring. When not set, a default in-process MessageRouter is generated.
+
+### Incremental Builds
+
+Only modules whose source or dependencies changed are regenerated. Cache is stored in `.lumina/build/cache.json`.
+
 ## Configuration
 
 ### Lumina.toml
@@ -180,10 +214,11 @@ Define every method the module responds to. The interface is the contract — th
 ```toml
 [project]
 name = "my-project"
-language = "python"      # target language for generated code
+language = "python"      # "python" or "typescript"
 
 [build]
 mode = "monolith"        # "monolith" or "microservice"
+# assemble = "自然语言描述自定义组装方式"
 
 # Enable auto-testing for specific modules (requires Claude Code agent)
 [modules.CriticalModule]

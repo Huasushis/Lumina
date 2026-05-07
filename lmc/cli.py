@@ -15,11 +15,23 @@ from lmc.config import get_agent_config
 from lmc.parser.parser import LuminaParser
 from lmc.project import find_project_root, find_src_dir, init_project, parse_manifest
 
+from lmc import __version__
+
 app = typer.Typer(help="Lumina compiler", no_args_is_help=True)
 
 
+def version_callback(value: bool):
+    if value:
+        typer.echo(f"lumina v{__version__}")
+        raise typer.Exit()
+
+
 @app.callback()
-def callback():
+def callback(
+    version: Annotated[bool, typer.Option("--version", "-V",
+                       callback=version_callback, is_eager=True,
+                       help="Show version and exit")] = False,
+):
     """Lumina compiler — parse .lm files and build systems."""
 
 
@@ -59,6 +71,8 @@ def build(
                     help="Build mode: monolith or microservice")] = "monolith",
     agent_type: Annotated[str, typer.Option("--agent", "-a",
                           help="Agent: llm or claude_code")] = "",
+    force: Annotated[bool, typer.Option("--force",
+                     help="Force rebuild all modules, ignoring cache")] = False,
 ):
     """Build the Lumina project in the current directory."""
     root = find_project_root()
@@ -93,7 +107,7 @@ def build(
     checker = Checker()
     warnings = checker.check(prog)
     for w in warnings:
-        typer.echo(f"  ⚠ {w}", err=True)
+        typer.echo(f"  [WARN] {w}", err=True)
 
     graph = ModuleGraph(prog)
     try:
@@ -137,16 +151,36 @@ def build(
         build_mode=build_mode,
         target_language=manifest.language,
         module_overrides=manifest.modules,
+        force=force,
     )
 
-    typer.echo(f"\nBuilding {len(order)} module(s)...")
+    typer.echo(f"\nGenerating {len(order)} module(s)...")
     try:
         results = orchestrator.build(main_file, agent)
     except Exception as e:
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
-    typer.echo(f"\nDone. {len(results)} module(s) generated.")
-    typer.echo(f"Output: {output_dir}")
+
+    # Assemble into runnable system
+    from lmc.builder.monolith import assemble
+    try:
+        final_dir = assemble(
+            modules=results,
+            output_dir=output_dir,
+            language=manifest.language,
+            assemble_hint=manifest.build.assemble,
+            dependency_order=[m for m in order if m in results],
+        )
+    except Exception as e:
+        typer.echo(f"Error assembling: {e}", err=True)
+        raise typer.Exit(1)
+
+    typer.echo(f"\nDone. {len(results)} module(s) in {final_dir}")
+    lang = manifest.language
+    if lang == "typescript":
+        typer.echo(f"Run: npx tsx {final_dir / 'main.ts'}")
+    else:
+        typer.echo(f"Run: python {final_dir / 'main.py'}")
 
 
 # ── parse ─────────────────────────────────────────────────────
@@ -178,7 +212,7 @@ def parse_cmd(
 
     checker = Checker()
     for w in checker.check(prog):
-        typer.echo(f"  ⚠ {w}", err=True)
+        typer.echo(f"  [WARN] {w}", err=True)
 
     gen = TaskGenerator()
     graph = ModuleGraph(prog)
