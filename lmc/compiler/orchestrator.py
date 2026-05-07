@@ -26,10 +26,12 @@ class Orchestrator:
         self,
         output_dir: Path,
         build_mode: str = "monolith",
+        target_language: str = "python",
         module_overrides: dict[str, ModuleOverride] | None = None,
     ):
         self._output_dir = output_dir
         self._build_mode = build_mode
+        self._language = target_language
         self._overrides = module_overrides or {}
         self._parser = LuminaParser()
         self._resolver = Resolver(self._parser)
@@ -96,7 +98,9 @@ class Orchestrator:
                     }
                     for name, a in task.actor_context.items()
                 },
-                target_language=task.target_language,
+                target_language=self._language,
+                extension="ts" if self._language == "typescript" else "py",
+                language_name="TypeScript" if self._language == "typescript" else "Python",
             )
 
             work_dir = self._output_dir / mod_name

@@ -135,6 +135,7 @@ def build(
     orchestrator = Orchestrator(
         output_dir=output_dir,
         build_mode=build_mode,
+        target_language=manifest.language,
         module_overrides=manifest.modules,
     )
 
