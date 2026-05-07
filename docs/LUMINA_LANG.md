@@ -190,23 +190,49 @@ mode = "monolith"        # "monolith" or "microservice"
 test = true
 ```
 
-### Agent Configuration (Environment Variables)
+### Agent Configuration
+
+Lumina supports two AI backends for code generation. Switch with `--agent`:
 
 ```bash
-LUMINA_AGENT=llm|claude_code    # which agent to use
-OPENAI_API_KEY=sk-xxx           # API key for LLM agent
-LUMINA_MODEL=gpt-4o             # model override
-LUMINA_API_BASE=https://...     # custom API endpoint
+lumina build --agent llm           # Pure LLM (default)
+lumina build --agent claude_code   # Claude Code CLI
+```
+
+**LLM agent** (`--agent llm`):
+- Requires `OPENAI_API_KEY` environment variable
+- Optional: `OPENAI_API_BASE` (default: https://api.openai.com/v1), `OPENAI_MODEL` (default: gpt-4o)
+- Code generation only — no testing capability
+
+```bash
+export OPENAI_API_KEY=sk-xxx
+lumina build --agent llm
+```
+
+**Claude Code agent** (`--agent claude_code`):
+- Requires `claude` CLI installed and in PATH
+- Install: `npm install -g @anthropic-ai/claude-code`
+- On Windows, also needs git-bash in PATH
+
+```bash
+npm install -g @anthropic-ai/claude-code
+lumina build --agent claude_code
+```
+
+Optional env vars for non-standard setups:
+```bash
+CLAUDE_CODE_PATH=/path/to/claude       # if not in PATH
+CLAUDE_CODE_GIT_BASH_PATH=/path/to/bash  # Windows git-bash location
 ```
 
 ## CLI Reference
 
 ```bash
 lumina init <name>                 # Create a new project
-lumina build                       # Build project (run in project root)
+lumina build                       # Build with default agent (llm)
+lumina build --agent claude_code   # Build with Claude Code agent
 lumina build --dry-run             # Preview Task JSONs without calling AI
-lumina build --agent claude_code   # Use Claude Code agent
 lumina build --mode microservice   # Override build mode
-lumina parse <file.lm>         # Show parsed AST
-lumina parse <file.lm> -f json # Show Task JSON
+lumina parse <file.lm>             # Show parsed AST
+lumina parse <file.lm> -f json     # Show Task JSON
 ```

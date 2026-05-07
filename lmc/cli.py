@@ -120,21 +120,16 @@ def build(
             typer.echo()
         return
 
-    if agent_cfg.type == "claude_code":
-        from lmc.agents.claude_code import ClaudeCodeAgent
-        agent = ClaudeCodeAgent(agent_cfg)
-    else:
-        from lmc.agents.llm import LLMAgent, AgentLLMConfig
-        llm_cfg = AgentLLMConfig(
-            api_base=agent_cfg.api_base,
-            api_key=agent_cfg.api_key,
-            model=agent_cfg.model,
-            max_tokens=agent_cfg.max_tokens,
-            temperature=agent_cfg.temperature,
-            request_timeout=agent_cfg.request_timeout,
-            max_retries=agent_cfg.max_retries,
-        )
-        agent = LLMAgent(llm_cfg)
+    try:
+        if agent_cfg.type == "claude_code":
+            from lmc.agents.claude_code import ClaudeCodeAgent
+            agent = ClaudeCodeAgent(agent_cfg)
+        else:
+            from lmc.agents.llm import LLMAgent
+            agent = LLMAgent(agent_cfg)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
 
     output_dir = root / ".lumina" / "build"
     orchestrator = Orchestrator(
@@ -144,7 +139,11 @@ def build(
     )
 
     typer.echo(f"\nBuilding {len(order)} module(s)...")
-    results = orchestrator.build(main_file, agent)
+    try:
+        results = orchestrator.build(main_file, agent)
+    except Exception as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(1)
     typer.echo(f"\nDone. {len(results)} module(s) generated.")
     typer.echo(f"Output: {output_dir}")
 

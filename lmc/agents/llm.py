@@ -18,7 +18,7 @@ from lmc.agents.base import (
     GeneratedFile,
     GeneratedFiles,
 )
-from lmc.config import AgentLLMConfig
+from lmc.config import AgentConfig
 
 
 class LLMAgent(AgentBackend):
@@ -27,7 +27,12 @@ class LLMAgent(AgentBackend):
     name = "llm"
     capabilities = {AgentCapability.GENERATE}
 
-    def __init__(self, config: AgentLLMConfig):
+    def __init__(self, config: AgentConfig):
+        if not config.api_key:
+            raise AgentError(
+                "No API key configured. Set OPENAI_API_KEY environment variable.\n"
+                "Example: export OPENAI_API_KEY=sk-xxx"
+            )
         self._cfg = config
         self._client = httpx.Client(
             base_url=config.api_base.rstrip("/"),
