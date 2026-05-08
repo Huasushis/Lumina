@@ -34,20 +34,14 @@ class ClaudeCodeAgent(AgentBackend):
 
     def generate(self, prompt: str, work_dir: Path) -> GeneratedFiles:
         work_dir.mkdir(parents=True, exist_ok=True)
-
-        prompt_file = work_dir / "LUMINA_TASK.md"
-        prompt_file.write_text(prompt, encoding="utf-8")
-
-        claude_md = work_dir / "CLAUDE.md"
-        claude_md.write_text(
+        (work_dir / "LUMINA_TASK.md").write_text(prompt, encoding="utf-8")
+        (work_dir / "CLAUDE.md").write_text(
             "Read LUMINA_TASK.md. Generate the requested code files. "
-            "After generating all files, output exactly one JSON block "
-            'wrapped in ```json fences with the format: '
+            "Output exactly one JSON block wrapped in ```json fences: "
             '{"task_id":"...","files":[{"path":"...","content":"..."}]}. '
             "Write real code, not placeholders.\n",
             encoding="utf-8",
         )
-
         return self._run_claude(prompt, work_dir)
 
     def _run_tests(self, task_id: str, files: GeneratedFiles,
@@ -76,8 +70,9 @@ class ClaudeCodeAgent(AgentBackend):
 
         try:
             result = subprocess.run(
-                [self._cli, "-p", prompt, "--output-format", "text",
+                [self._cli, "--output-format", "text",
                  "--dangerously-skip-permissions"],
+                input=prompt,
                 cwd=str(work_dir),
                 capture_output=True,
                 text=True,

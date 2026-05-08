@@ -1,12 +1,4 @@
-"""Monolith builder — single-process assembly with in-memory routing.
-
-Generates a runnable system from AI-generated module code:
-  - Runtime base class (LuminaActor)
-  - Main entry point that instantiates and wires all actors
-  - Supports Python and TypeScript
-"""
-
-from __future__ import annotations
+"""Monolith builder — single-process assembly with in-memory routing."""
 
 from pathlib import Path
 
@@ -23,11 +15,9 @@ class LuminaActor:
         self._router: MessageRouter | None = None
 
     def run(self) -> None:
-        """Override: called once at startup."""
         pass
 
     def invoke(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Override: handle incoming JSON messages."""
         raise NotImplementedError(f"Method {method} not implemented")
 
     def send_message(self, target: str, method: str,
@@ -38,8 +28,6 @@ class LuminaActor:
 
 
 class MessageRouter:
-    """In-process message routing table."""
-
     def __init__(self):
         self._actors: dict[str, LuminaActor] = {}
 
@@ -61,25 +49,18 @@ export abstract class LuminaActor {
   private router: MessageRouter | null = null;
   readonly name: string;
 
-  constructor(name: string) {
-    this.name = name;
-  }
+  constructor(name: string) { this.name = name; }
 
-  /** Called once at startup. */
   abstract run(): Promise<void>;
-
-  /** Handle an incoming JSON message. */
   abstract invoke(method: string, params: Record<string, unknown>): Promise<Record<string, unknown>>;
 
-  /** Send a message to a child actor. */
   protected async sendMessage(
     target: string, method: string, params: Record<string, unknown>
   ): Promise<Record<string, unknown>> {
-    if (!this.router) throw new Error("Actor not registered with a router");
+    if (!this.router) throw new Error("Actor not registered");
     return this.router.route(target, method, params);
   }
 
-  /** @internal */
   _setRouter(router: MessageRouter) { this.router = router; }
 }
 
@@ -107,23 +88,11 @@ def assemble(
     assemble_hint: str | None = None,
     dependency_order: list[str] | None = None,
 ) -> Path:
-    """Assemble generated modules into a runnable system.
-
-    Returns the output directory path.
-    """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     order = dependency_order or list(modules.keys())
 
-    # Detect language from modules if not specified
-    if language == "python" and modules:
-        first = next(iter(modules.values()))
-        if first.files:
-            first_path = first.files[0].path
-            if first_path.endswith(".ts"):
-                language = "typescript"
-
-    # Write runtime base class
+    # Write runtime
     runtime_dir = output_dir / "_runtime"
     runtime_dir.mkdir(exist_ok=True)
     if language == "typescript":
@@ -131,66 +100,77 @@ def assemble(
     else:
         (runtime_dir / "lumina_actor.py").write_text(_PYTHON_RUNTIME, encoding="utf-8")
 
-    # Write each module's generated files
+    # Write module files
     for mod_name, gen_files in modules.items():
         for gf in gen_files.files:
-            # Write to project root, preserving path
             dest = output_dir / gf.path
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(gf.content, encoding="utf-8")
 
-    # Generate main entry point
-    if assemble_hint:
-        main_content = _generate_custom_main(order, language, assemble_hint)
-    else:
-        main_content = _generate_default_main(order, language)
-
+    # Write entry point
     if language == "typescript":
-        main_path = output_dir / "main.ts"
-        # Also generate minimal package.json
-        pkg = output_dir / "package.json"
-        pkg.write_text('{\n  "name": "lumina-system",\n  "type": "module",\n'
-                       '  "dependencies": {}\n}\n', encoding="utf-8")
+        (output_dir / "main.ts").write_text(_gen_ts_main(order), encoding="utf-8")
+        (output_dir / "package.json").write_text(
+            '{"name":"lumina-system","type":"module","dependencies":{}}\n', encoding="utf-8")
     else:
-        main_path = output_dir / "main.py"
-
-    main_path.write_text(main_content, encoding="utf-8")
+        (output_dir / "main.py").write_text(_gen_py_main(order), encoding="utf-8")
 
     return output_dir
 
 
-def _generate_default_main(order: list[str], language: str) -> str:
-    """Generate a standard main entry point that wires all actors."""
-    if language == "typescript":
-        return _ts_default_main(order)
-    return _py_default_main(order)
-
-
-def _py_default_main(order: list[str]) -> str:
-    imports = [f"from {m.lower()} import {m}" for m in order]
-    instances = [f'    router.register("{m}", {m}("{m}"))' for m in order]
+def _gen_py_main(order: list[str]) -> str:
+    imports = "\n".join(f"from {m.lower()} import {m}" for m in order)
+    registers = "\n".join(f'    router.register("{m}", {m}("{m}"))' for m in order)
+    actor_list = "[" + ", ".join(f'"{m}"' for m in order) + "]"
     return f'''"""Auto-generated Lumina system entry point."""
 
+import json
 from _runtime.lumina_actor import MessageRouter
 
-{chr(10).join(imports)}
+{imports}
 
 
 def main():
     router = MessageRouter()
-{chr(10).join(instances)}
+{registers}
 
+    actors = {actor_list}
     for name, actor in router._actors.items():
         print(f"[Lumina] {{name}} starting...")
         actor.run()
 
-    print("System running.")
-    import time
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("\\nShutting down.")
+    print(f"Ready. Actors: {{actors}}")
+    print('Usage: "Actor.method {{json}}" | list | quit')
+    print()
+
+    while True:
+        try:
+            line = input("> ").strip()
+        except (KeyboardInterrupt, EOFError):
+            break
+        if line in ("quit", "exit"):
+            break
+        if not line:
+            continue
+        if line == "list":
+            for name in actors:
+                a = router._actors[name]
+                methods = [k for k in dir(a.__class__)
+                           if not k.startswith("_") and k not in
+                           ("run", "invoke", "send_message", "name")]
+                if methods:
+                    print(f"  {{name}}: {{', '.join(methods)}}")
+            continue
+        try:
+            target_method, _, params_str = line.partition(" ")
+            target, _, method = target_method.partition(".")
+            params = json.loads(params_str) if params_str.strip() else {{}}
+            result = router.route(target, method, params)
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        except Exception as e:
+            print(f"Error: {{e}}")
+
+    print("\\nShutting down.")
 
 
 if __name__ == "__main__":
@@ -198,37 +178,47 @@ if __name__ == "__main__":
 '''
 
 
-def _ts_default_main(order: list[str]) -> str:
-    imports = [f'import {{ {m} }} from "./{m.lower()}.js";' for m in order]
-    instances = [f'  router.register("{m}", new {m}("{m}"));' for m in order]
+def _gen_ts_main(order: list[str]) -> str:
+    imports = "\n".join(f'import {{ {m} }} from "./{m.lower()}.js";' for m in order)
+    registers = "\n".join(f'  router.register("{m}", new {m}("{m}"));' for m in order)
+    actors = "[" + ", ".join(f'"{m}"' for m in order) + "]"
     return f'''// Auto-generated Lumina system entry point.
 import {{ MessageRouter }} from "./_runtime/LuminaActor.js";
-{chr(10).join(imports)}
+{imports}
 
 async function main() {{
   const router = new MessageRouter();
-{chr(10).join(instances)}
+{registers}
 
-  for (const actor of router["actors"].values()) {{
-    console.log(`[Lumina] ${{actor.name}} starting...`);
-    await actor.run();
+  const actors = {actors};
+  for (const name of actors) {{
+    console.log(`[Lumina] ${{name}} starting...`);
+    await router.route(name, "run", {{}});
   }}
 
-  console.log("System running. Press Ctrl+C to stop.");
+  console.log(`Ready. Actors: ${{actors.join(", ")}}`);
+  console.log('Usage: "Actor.method {{"key":"value"}}" | quit');
+
+  // REPL via stdin
+  const readline = await import("readline");
+  const rl = readline.createInterface({{ input: process.stdin, output: process.stdout }});
+  for await (const line of rl) {{
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (trimmed === "quit" || trimmed === "exit") break;
+    try {{
+      const [actorMethod, ...paramParts] = trimmed.split(" ");
+      const [target, method] = actorMethod.split(".");
+      const params = paramParts.length > 0 ? JSON.parse(paramParts.join(" ")) : {{}};
+      const result = await router.route(target, method, params);
+      console.log(JSON.stringify(result, null, 2));
+    }} catch (e) {{
+      console.error(`Error: ${{e}}`);
+    }}
+  }}
+  rl.close();
+  console.log("\\nShutting down.");
 }}
 
 main().catch(console.error);
-'''
-
-
-def _generate_custom_main(order: list[str], language: str, hint: str) -> str:
-    """Placeholder: when assemble_hint is set, defer to AI agent.
-    For now, include the hint as a comment in default main."""
-    ext = "ts" if language == "typescript" else "py"
-    return f'''// [CUSTOM ASSEMBLY]
-// {hint}
-// TODO: send system topology + this hint to AI agent for custom assembly.
-// For now, default wiring is provided below.
-
-{_generate_default_main(order, language)}
 '''
