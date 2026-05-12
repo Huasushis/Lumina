@@ -35,12 +35,16 @@ class Orchestrator:
         target_language: str = "python",
         module_overrides: dict[str, ModuleOverride] | None = None,
         force: bool = False,
+        project_root: Path | None = None,
+        only_modules: set[str] | None = None,
     ):
         self._output_dir = output_dir
         self._build_mode = build_mode
         self._language = target_language
         self._overrides = module_overrides or {}
         self._force = force
+        self._project_root = project_root or output_dir
+        self._only = only_modules
         self._parser = LuminaParser()
         self._resolver = Resolver(self._parser)
         self._checker = Checker()
@@ -75,9 +79,19 @@ class Orchestrator:
         template = self._jinja.get_template("module_generate.j2")
         results: dict[str, GeneratedFiles] = {}
 
-        cache = _load_cache(self._output_dir)
+        cache = _load_cache(self._project_root)
 
         for mod_name in order:
+            # Skip if --only was specified and this module isn't in the set
+            if self._only and mod_name not in self._only:
+                # Still try to restore from cache so assembly has all files
+                cached = cache.get(mod_name)
+                if cached:
+                    cached_files = _cached_files(cached, self._output_dir / mod_name)
+                    if cached_files:
+                        results[mod_name] = cached_files
+                        print(f"  [OK] {mod_name} (cached)")
+                continue
             module = prog.module_registry[mod_name]
             task = self._taskgen.generate(module, prog, str(path))
 
@@ -151,7 +165,7 @@ class Orchestrator:
                     if not test_result.passed:
                         print(f"    {test_result.output[:200]}")
 
-        _save_cache(self._output_dir, cache)
+        _save_cache(self._project_root, cache)
         return results
 
 
@@ -192,13 +206,21 @@ def _hash_module(module, prog, graph) -> str:
         h.update(m.encode())
         h.update(str(spec.input_fields).encode())
         h.update(str(spec.output_fields).encode())
-    for dep in sorted(graph.dependencies_of(module.name)):
-        h.update(dep.encode())
+    # Hash dependency interfaces — if a dependency's contract changes, rebuild
+    for dep_name in sorted(graph.dependencies_of(module.name)):
+        dep_mod = prog.module_registry.get(dep_name)
+        if dep_mod is None:
+            continue
+        h.update(dep_name.encode())
+        for dm, dspec in sorted(dep_mod.interface.items()):
+            h.update(dm.encode())
+            h.update(str(dspec.input_fields).encode())
+            h.update(str(dspec.output_fields).encode())
     return h.hexdigest()
 
 
 def _load_cache(output_dir: Path) -> dict:
-    cache_file = output_dir / "cache.json"
+    cache_file = output_dir / ".lumina.lock"
     if cache_file.exists():
         try:
             return json.loads(cache_file.read_text(encoding="utf-8"))
@@ -209,7 +231,7 @@ def _load_cache(output_dir: Path) -> dict:
 
 def _save_cache(output_dir: Path, cache: dict) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / "cache.json").write_text(
+    (output_dir / ".lumina.lock").write_text(
         json.dumps(cache, indent=2, ensure_ascii=False), encoding="utf-8")
 
 

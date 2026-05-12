@@ -73,6 +73,8 @@ def build(
                           help="Agent: llm or claude_code")] = "",
     force: Annotated[bool, typer.Option("--force",
                      help="Force rebuild all modules, ignoring cache")] = False,
+    only: Annotated[str, typer.Option("--only",
+                    help="Only rebuild specific modules (comma-separated)")] = "",
 ):
     """Build the Lumina project in the current directory."""
     root = find_project_root()
@@ -152,6 +154,8 @@ def build(
         target_language=manifest.language,
         module_overrides=manifest.modules,
         force=force,
+        project_root=root,
+        only_modules={m.strip() for m in only.split(",") if m.strip()} if only else None,
     )
 
     typer.echo(f"\nGenerating {len(order)} module(s)...")
