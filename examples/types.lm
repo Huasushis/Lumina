@@ -1,6 +1,0 @@
-// Minimal Lumina example: shared types
-
-type DataPacket = {
-    "id": Int("全局唯一的时间戳ID"),
-    "payload": List<Float>("待处理的浮点数序列")
-}("标准数据流通讯包")

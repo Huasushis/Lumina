@@ -1,8 +1,0 @@
-module Calc {
-    interface: {
-        "add": { "a": Int, "b": Int } -> { "result": Int }
-        "multiply": { "a": Int, "b": Int } -> { "result": Int }
-    }
-
-    logic: "simple calculator, implement add and multiply"
-}

@@ -99,8 +99,7 @@ def build(
     typer.echo(f"Source:  {src_dir}")
 
     agent_cfg = get_agent_config()
-    if agent_type:
-        agent_cfg.type = agent_type
+    agent_cfg.type = agent_type or manifest.build.agent
 
     parser = LuminaParser()
     resolver = Resolver(parser)
@@ -186,6 +185,7 @@ def build(
     )
 
     try:
+        from lmc.compiler.orchestrator import _detect_env
         final_dir = assemble(
             modules=results,
             output_dir=output_dir,
@@ -193,6 +193,8 @@ def build(
             dependency_order=[m for m in order if m in results],
             agent=agent,
             jinja_env=jinja_env,
+            project_name=manifest.name,
+            env_info=_detect_env(),
             actor_graph=actor_graph,
         )
     except Exception as e:

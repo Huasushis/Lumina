@@ -1,6 +1,0 @@
-[project]
-name = "ts-game"
-language = "typescript"
-
-[build]
-mode = "monolith"

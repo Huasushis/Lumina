@@ -29,13 +29,13 @@ class ModuleOverride:
 
 @dataclass
 class BuildSection:
-    mode: str = "monolith"  # "monolith" | "microservice"
-    assemble: str | None = None  # natural language custom assembly instruction
+    mode: str = "monolith"
+    agent: str = "llm"
+    assemble: str | None = None
 
 
 @dataclass
 class LuminaManifest:
-    """Parsed Lumina.toml."""
     name: str
     language: str = "python"
     build: BuildSection = field(default_factory=BuildSection)
@@ -43,7 +43,6 @@ class LuminaManifest:
 
 
 def parse_manifest(path: Path) -> LuminaManifest:
-    """Parse a Lumina.toml file."""
     with open(path, "rb") as f:
         raw = tomllib.load(f)
 
@@ -56,6 +55,7 @@ def parse_manifest(path: Path) -> LuminaManifest:
         language=proj.get("language", "python"),
         build=BuildSection(
             mode=build_raw.get("mode", "monolith"),
+            agent=build_raw.get("agent", "llm"),
             assemble=build_raw.get("assemble"),
         ),
         modules={
@@ -102,7 +102,8 @@ language = "python"
 
 [build]
 mode = "monolith"
-# assemble = "生成一个命令行工具，从 stdin 读取 JSON，输出到 stdout"
+agent = "llm"
+# assemble = "custom assembly instruction"
 
 # Per-module overrides (optional):
 # [modules.MyModule]

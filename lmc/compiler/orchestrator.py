@@ -141,7 +141,7 @@ class Orchestrator:
                 language_name="TypeScript" if self._language == "typescript" else "Python",
             )
 
-            work_dir = self._output_dir
+            work_dir = self._output_dir / mod_name
             work_dir.mkdir(parents=True, exist_ok=True)
             files = agent.generate(prompt, work_dir)
             results[mod_name] = files

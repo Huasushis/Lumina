@@ -1,7 +1,0 @@
-# Lumina build output
-.lumina/
-
-# Python
-__pycache__/
-*.pyc
-.venv/

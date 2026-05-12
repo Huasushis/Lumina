@@ -1,18 +1,25 @@
 [SYSTEM]
-You are assembling a Lumina Actor Model system into a runnable application.
-All individual modules have been implemented. Your job: create the glue code.
+Assemble a Lumina Actor Model system into a minimal runnable application.
+All individual modules have been implemented. Your job: create the entry point.
+
+[PROJECT NAME]
+{{ project_name }}
+
+[ENVIRONMENT]
+OS: {{ env.os }}, {{ env.arch }}
+Available runtimes: {{ env.available_runtimes | join(", ") }}
 
 [MODULES IMPLEMENTED]
 {% for name, info in modules.items() %}
-Module: {{ name }}
+Module "{{ name }}" (directory: {{ name }}/)
   Files:
 {% for f in info.files %}
-    - {{ f.path }}
+    - {{ name }}/{{ f.path }}
 {% endfor %}
 {% endfor %}
 
 [SYSTEM TOPOLOGY]
-Dependency order (leaf modules first):
+Dependency order (build leaf modules first):
 {% for name in dependency_order %}
   {{ loop.index }}. {{ name }}
 {% endfor %}
@@ -20,38 +27,32 @@ Dependency order (leaf modules first):
 {% if actor_graph %}
 Actor wiring:
 {% for mod, children in actor_graph.items() %}
-  {{ mod }}:
+  {{ mod }} has child actors:
 {% for child in children %}
-    -> {{ child.actor_name }} (type: {{ child.module_type }})
+    -> "{{ child.actor_name }}" (type: {{ child.module_type }})
 {% endfor %}
 {% endfor %}
 {% endif %}
 
+[REQUIREMENT]
+1. Create the minimal entry point and any needed runtime code.
+2. The entry point MUST:
+   - Import and instantiate ALL modules
+   - Call run() on each module
+   - Do NOT add any REPL, IO loop, or input handling
+3. Modules already have their own IO logic — the entry point just starts them.
+4. Use idiomatic conventions for the target environment.
+5. Write complete, working code.
 {% if assemble_hint %}
+
 [CUSTOM ASSEMBLY REQUIREMENT]
 {{ assemble_hint }}
-{% else %}
-[DEFAULT REQUIREMENT]
-Create a runnable entry point that:
-1. Imports all modules
-2. Creates a message router
-3. Registers all actors
-4. Calls run() on each
-5. Provides an interactive REPL that accepts "Actor.method {json}" commands
-6. On "quit", cleanly shuts down
-
-Also create the runtime base class (LuminaActor) if modules import from it.
-Use idiomatic conventions for the target language. Do NOT use any framework — keep it minimal.
 {% endif %}
 
 [OUTPUT FORMAT]
-Respond ONLY with a JSON object containing ALL files needed:
+Respond ONLY with:
 {
   "files": [
-    {"path": "relative/path", "content": "file content"},
-    ...
+    {"path": "relative/path", "content": "..."}
   ]
 }
-
-Include: runtime base class, message router, main entry point, package config if needed.
-Write complete, working code. No placeholders.

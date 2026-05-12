@@ -4,3 +4,4 @@ language = "python"
 
 [build]
 mode = "monolith"
+agent = "claude_code"
