@@ -1,41 +1,57 @@
 [SYSTEM]
-You are a system assembly agent for the Lumina Actor Model framework.
+You are assembling a Lumina Actor Model system into a runnable application.
+All individual modules have been implemented. Your job: create the glue code.
 
-[TASK]
-Assemble the following modules into a working {{ build_mode }} system.
-Generate the entry point that wires all actors together.
-
-[MODULES]
+[MODULES IMPLEMENTED]
 {% for name, info in modules.items() %}
 Module: {{ name }}
-  Task ID: {{ info.task_id }}
-  Interface: {{ info.interface }}
-  Child actors: {{ info.actor_context }}
-  Generated files: {{ info.files }}
+  Files:
+{% for f in info.files %}
+    - {{ f.path }}
+{% endfor %}
 {% endfor %}
 
-[DEPENDENCY ORDER]
+[SYSTEM TOPOLOGY]
+Dependency order (leaf modules first):
 {% for name in dependency_order %}
   {{ loop.index }}. {{ name }}
 {% endfor %}
 
-[BUILD MODE]
-{{ build_mode }}
+{% if actor_graph %}
+Actor wiring:
+{% for mod, children in actor_graph.items() %}
+  {{ mod }}:
+{% for child in children %}
+    -> {{ child.actor_name }} (type: {{ child.module_type }})
+{% endfor %}
+{% endfor %}
+{% endif %}
 
-{% if build_mode == "monolith" %}
-Generate a single main entry point that:
-- Instantiates all actors
-- Registers them with the in-process MessageRouter
-- Calls run() on each
-- Starts the event loop
+{% if assemble_hint %}
+[CUSTOM ASSEMBLY REQUIREMENT]
+{{ assemble_hint }}
+{% else %}
+[DEFAULT REQUIREMENT]
+Create a runnable entry point that:
+1. Imports all modules
+2. Creates a message router
+3. Registers all actors
+4. Calls run() on each
+5. Provides an interactive REPL that accepts "Actor.method {json}" commands
+6. On "quit", cleanly shuts down
 
-{% elif build_mode == "microservice" %}
-Generate per-service startup scripts and a docker-compose.yml that:
-- Exposes each module on a unique port
-- Configures service discovery
-- Sets up health checks
-
+Also create the runtime base class (LuminaActor) if modules import from it.
+Use idiomatic conventions for the target language. Do NOT use any framework — keep it minimal.
 {% endif %}
 
 [OUTPUT FORMAT]
-Respond with a JSON block containing the assembled system files.
+Respond ONLY with a JSON object containing ALL files needed:
+{
+  "files": [
+    {"path": "relative/path", "content": "file content"},
+    ...
+  ]
+}
+
+Include: runtime base class, message router, main entry point, package config if needed.
+Write complete, working code. No placeholders.

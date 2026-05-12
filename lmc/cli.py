@@ -161,26 +161,42 @@ def build(
         typer.echo(f"Error: {e}", err=True)
         raise typer.Exit(1)
 
+    # Build actor dependency graph for assembly
+    actor_graph: dict[str, list[dict]] = {}
+    for mod_name in order:
+        if mod_name not in prog.module_registry:
+            continue
+        mod = prog.module_registry[mod_name]
+        if mod.actors:
+            actor_graph[mod_name] = [
+                {"actor_name": a.name, "module_type": a.module_ref}
+                for a in mod.actors
+            ]
+
     # Assemble into runnable system
     from lmc.builder.monolith import assemble
+    from jinja2 import Environment, FileSystemLoader, select_autoescape
+    jinja_env = Environment(
+        loader=FileSystemLoader(str(Path(__file__).parent / "templates")),
+        autoescape=select_autoescape(),
+    )
+
     try:
         final_dir = assemble(
             modules=results,
             output_dir=output_dir,
-            language=manifest.language,
             assemble_hint=manifest.build.assemble,
             dependency_order=[m for m in order if m in results],
+            agent=agent,
+            jinja_env=jinja_env,
+            actor_graph=actor_graph,
         )
     except Exception as e:
         typer.echo(f"Error assembling: {e}", err=True)
         raise typer.Exit(1)
 
     typer.echo(f"\nDone. {len(results)} module(s) in {final_dir}")
-    lang = manifest.language
-    if lang == "typescript":
-        typer.echo(f"Run: npx tsx {final_dir / 'main.ts'}")
-    else:
-        typer.echo(f"Run: python {final_dir / 'main.py'}")
+    typer.echo(f"Look in {final_dir} for the entry point")
 
 
 # ── parse ─────────────────────────────────────────────────────

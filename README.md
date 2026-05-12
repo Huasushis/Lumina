@@ -79,6 +79,13 @@ lumina build
 lumina build --agent claude_code
 ```
 
+## Documentation
+
+- [Getting Started](docs/getting-started.md)
+- [Language Reference](docs/language.md) — complete syntax with examples
+- [Configuration](docs/configuration.md) — Lumina.toml, agents, CLI
+- [Examples](docs/examples.md) — walkthrough of example projects
+
 ## Project Structure
 
 ```

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import platform
+import shutil
+import sys
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -94,6 +98,7 @@ class Orchestrator:
             auto_test = override.test if override else False
 
             prompt = template.render(
+                env=_detect_env(),
                 module_name=task.module_name,
                 setup=task.setup,
                 interface={
@@ -148,6 +153,28 @@ class Orchestrator:
 
         _save_cache(self._output_dir, cache)
         return results
+
+
+# ── Environment detection ─────────────────────────────────────
+
+
+def _detect_env() -> dict:
+    """Detect the build environment for the AI prompt."""
+    runtimes = []
+    if shutil.which("python") or shutil.which("python3"):
+        runtimes.append(f"python {sys.version_info.major}.{sys.version_info.minor}")
+    if shutil.which("node"):
+        runtimes.append("node.js")
+    if shutil.which("g++") or shutil.which("gcc"):
+        runtimes.append("g++/gcc")
+    if shutil.which("tsx") or shutil.which("npx"):
+        runtimes.append("tsx/npx")
+
+    return {
+        "os": platform.system(),
+        "arch": platform.machine(),
+        "available_runtimes": runtimes or ["unknown"],
+    }
 
 
 # ── Incremental build helpers ──────────────────────────────────

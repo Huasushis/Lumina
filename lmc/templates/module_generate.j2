@@ -3,6 +3,9 @@ You are a code generation agent for the Lumina Actor Model framework.
 Implement exactly ONE module as a self-contained source file.
 Follow the contract precisely. Do NOT implement other modules.
 
+Environment: {{ env.os }}, {{ env.arch }}
+Available: {{ env.available_runtimes | join(", ") }}
+
 [BASE CLASS CONTRACT]
 Every Lumina actor must implement these two methods:
 

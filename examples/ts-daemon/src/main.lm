@@ -1,0 +1,11 @@
+module TaskManager {
+    setup: "initialize empty task queue in memory, assign each task a unique ID and timestamp"
+
+    interface: {
+        "submit": { "payload": String("JSON task data"), "priority": Int("1=low 2=normal 3=high") } -> { "id": String("generated task ID") }
+        "list": { } -> { "tasks": List<Map<String, Map<String, String>>> }
+        "remove": { "id": String } -> { "ok": String }
+    }
+
+    logic: "simple in-memory queue: submit adds task with auto-generated UUID, list returns all pending tasks sorted by priority desc then timestamp asc, remove deletes a task by ID"
+}
