@@ -17,11 +17,20 @@ class ModuleGraph:
         self._build()
 
     def _build(self):
+        seen: set[str] = set()
         for mod in self._prog.module_registry.values():
+            if mod.name in seen:
+                continue
+            seen.add(mod.name)
             deps: set[str] = set()
             for actor in mod.actors:
-                if actor.module_ref in self._prog.module_registry:
-                    deps.add(actor.module_ref)
+                ref = actor.module_ref
+                # Resolve qualified name to simple name
+                dep = self._prog.module_registry.get(ref)
+                if dep is not None:
+                    deps.add(dep.name)
+                elif ref in self._prog.module_registry:
+                    deps.add(ref)
             self._deps[mod.name] = deps
 
     def dependencies_of(self, module_name: str) -> set[str]:

@@ -41,7 +41,8 @@ Actor wiring:
    - Import each module from its subdirectory
    - Instantiate and register all actors
    - Call run() on each actor
-   - Do NOT add REPL, IO loop, or input handling
+   - Block the main thread indefinitely (sleep, select, or event loop)
+     so the process stays alive after all actors start
 3. Write complete, working code. No placeholders.
 {% if assemble_hint %}
 

@@ -104,8 +104,6 @@ class Resolver:
             prog.module_registry[key] = mod
 
         # Resolve imports recursively BEFORE registering in source_files.
-        # This way, if an import leads back to the current file, it won't
-        # be in source_files and the circular import check will fire.
         import_map: dict[str, str] = {}
         base_dir = path.parent
         for imp in sf.imports:
@@ -116,6 +114,13 @@ class Resolver:
                     f"(resolved to '{import_path}')", str(path))
             self._load_file(import_path, prog, loading)
             import_map[imp.alias] = str(import_path)
+
+            # Register imported modules under qualified names (e.g. d.DecisionEngine)
+            imported_sf = prog.source_files[str(import_path)]
+            for mod in imported_sf.modules:
+                qualified = f"{imp.alias}.{mod.name}"
+                if qualified not in prog.module_registry:
+                    prog.module_registry[qualified] = mod
 
         # NOW register in source_files — all imports resolved without cycles
         prog.source_files[path_str] = sf
