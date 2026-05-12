@@ -1,0 +1,20 @@
+{
+  "GameUI": {
+    "hash": "ce623a8e7185cb71f17e06a922d078f8acaf52df967be6fe79278da46aac756b",
+    "files": [
+      {
+        "path": "gameui.py",
+        "content": "from lumina.actor import LuminaActor\n\n\nclass GameUI(LuminaActor):\n    def __init__(self):\n        super().__init__()\n        self.attempt = 0\n        self.config = None\n\n    def run(self):\n        self.invoke(\"new_game\", {\"config\": {\"min\": 1, \"max\": 100, \"max_attempts\": 7}})\n\n    def invoke(self, method, params):\n        if method == \"submit_guess\":\n            value = params[\"value\"]\n            self.attempt += 1\n\n            engine_resp = self.send_message(\"engine\", \"guess\", {\n                \"guess\": {\"value\": value, \"attempt\": self.attempt}\n            })\n            result = engine_resp[\"result\"]\n\n            print(f\"Attempt {result['attempts']}/{result['max_attempts']}: {result['hint']}\")\n\n            if result[\"won\"]:\n                print(f\"Congratulations! You guessed the number in {result['attempts']} attempts!\")\n            elif result[\"attempts\"] >= result[\"max_attempts\"]:\n                print(\"Game over! You're out of attempts.\")\n\n            return {\"result\": result}\n\n        elif method == \"new_game\":\n            config = params[\"config\"]\n            self.config = config\n            self.attempt = 0\n\n            self.send_message(\"engine\", \"reset\", {\"config\": config})\n\n            print(f\"Welcome to the Number Guessing Game!\")\n            print(f\"I'm thinking of a number between {config['min']} and {config['max']}.\")\n            print(f\"You have {config['max_attempts']} attempts to guess it. Good luck!\")\n\n            return {\"ok\": \"New game started\"}\n\n        else:\n            raise ValueError(f\"Unknown method: {method}\")\n"
+      }
+    ]
+  },
+  "DecisionEngine": {
+    "hash": "22baa9b0981d4228edcebe493c95c77f9e2c83b9c26d4962b872a0ec1b89d652",
+    "files": [
+      {
+        "path": "decision_engine.py",
+        "content": "import random\n\nfrom lumina.actor import LuminaActor\n\n\nclass DecisionEngine(LuminaActor):\n    def run(self):\n        self._min = 1\n        self._max = 100\n        self._max_attempts = 10\n        self._secret = random.randint(self._min, self._max)\n        self._attempts = 0\n\n    def invoke(self, method: str, params: dict) -> dict:\n        if method == \"guess\":\n            guess_data = params[\"guess\"]\n            value = guess_data[\"value\"]\n\n            self._attempts += 1\n\n            if self._attempts > self._max_attempts:\n                return {\n                    \"result\": {\n                        \"hint\": \"game over\",\n                        \"attempts\": self._attempts,\n                        \"max_attempts\": self._max_attempts,\n                        \"won\": False\n                    }\n                }\n\n            if value < self._secret:\n                hint = \"higher\"\n                won = False\n            elif value > self._secret:\n                hint = \"lower\"\n                won = False\n            else:\n                hint = \"correct\"\n                won = True\n\n            return {\n                \"result\": {\n                    \"hint\": hint,\n                    \"attempts\": self._attempts,\n                    \"max_attempts\": self._max_attempts,\n                    \"won\": won\n                }\n            }\n        elif method == \"reset\":\n            config = params[\"config\"]\n            self._min = config[\"min\"]\n            self._max = config[\"max\"]\n            self._max_attempts = config[\"max_attempts\"]\n            self._secret = random.randint(self._min, self._max)\n            self._attempts = 0\n            return {\"ok\": \"reset complete\"}\n        else:\n            raise ValueError(f\"Unknown method: {method}\")\n"
+      }
+    ]
+  }
+}

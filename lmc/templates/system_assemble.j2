@@ -35,14 +35,14 @@ Actor wiring:
 {% endif %}
 
 [REQUIREMENT]
-1. Create the minimal entry point and any needed runtime code.
+1. Create ONLY the entry point and any runtime glue. Do NOT re-implement modules.
+   Modules are already implemented in their subdirectories.
 2. The entry point MUST:
-   - Import and instantiate ALL modules
-   - Call run() on each module
-   - Do NOT add any REPL, IO loop, or input handling
-3. Modules already have their own IO logic — the entry point just starts them.
-4. Use idiomatic conventions for the target environment.
-5. Write complete, working code.
+   - Import each module from its subdirectory
+   - Instantiate and register all actors
+   - Call run() on each actor
+   - Do NOT add REPL, IO loop, or input handling
+3. Write complete, working code. No placeholders.
 {% if assemble_hint %}
 
 [CUSTOM ASSEMBLY REQUIREMENT]

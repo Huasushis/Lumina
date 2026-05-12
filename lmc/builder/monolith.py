@@ -60,6 +60,9 @@ def assemble(
         for gf in result.files:
             clean = _normalize_path(gf.path)
             dest = output_dir / clean
+            # Don't overwrite existing module files
+            if dest.exists():
+                continue
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(gf.content, encoding="utf-8")
     except Exception as e:

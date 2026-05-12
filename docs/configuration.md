@@ -2,80 +2,89 @@
 
 ## Lumina.toml
 
-Place at project root. Created automatically by `lumina init`.
-
 ```toml
 [project]
 name = "my-project"
-language = "python"          # "python" | "typescript" | "cpp" | ...
+language = "python"          # target language for generated code
 
 [build]
 mode = "monolith"            # "monolith" | "microservice"
-assemble = ""                # optional: natural-language custom assembly
+agent = "llm"                # "llm" | "claude_code"
+assemble = ""                # optional: natural-language assembly hint
 
-# Per-module test overrides (Claude Code agent only)
-[modules.MyModule]
-test = true
+[modules.CriticalModule]
+test = true                  # enable auto-test (Claude Code only)
 ```
 
 ### `language`
 
-Target language for generated code. The AI agent uses this to produce idiomatic code. Common values: `python`, `typescript`, `cpp`, `java`, `go`, `rust`.
+Target language for generated code: `python`, `typescript`, `cpp`, `go`, etc. The AI uses this to produce idiomatic code.
+
+### `agent`
+
+- `llm`: OpenAI-compatible API. Needs `OPENAI_API_KEY` env var.
+- `claude_code`: Local Claude Code CLI. Needs `claude` in PATH.
+
+CLI flag `--agent` overrides this.
 
 ### `mode`
 
-- `monolith`: all actors in one process, in-memory message routing
-- `microservice`: each actor in its own process, network communication
+- `monolith`: all actors in one process, in-memory routing
+- `microservice`: each actor is its own service
 
 ### `assemble`
 
-Optional natural-language instruction for the system assembly step:
+Optional natural-language instruction for the final assembly step. When set, the instruction is appended to the system assembly prompt. Use for custom entry point behavior:
 
 ```toml
-assemble = "生成一个 CLI 工具，支持 start/stop/status 命令作为后台服务"
+assemble = "生成一个 HTTP 服务器，/chat 路由读取 POST body 并返回流式响应"
 ```
 
-When empty, the AI generates a default REPL entry point.
+When not set, the default prompt tells AI to generate a minimal main entry point that instantiates all actors and calls `run()`.
 
-## Agent Configuration
+### `modules.<Name>.test`
 
-Agent credentials use environment variables. They are NEVER stored in Lumina.toml.
+Enable automatic test generation + execution for a specific module. Only works with `agent = "claude_code"` (LLM has no execution capability).
 
-### LLM agent
+## Agent Credentials
+
+API keys are **never** stored in `Lumina.toml`. They live in environment variables.
+
+### LLM
 
 ```bash
 export OPENAI_API_KEY=sk-xxx          # required
-export OPENAI_API_BASE=https://...    # optional, for custom endpoints
-export LUMINA_MODEL=gpt-4o            # optional, model override
+export OPENAI_API_BASE=https://...    # optional: custom endpoint
 ```
 
-### Claude Code agent
+### Claude Code
 
 ```bash
 npm install -g @anthropic-ai/claude-code
 ```
 
-Optional overrides:
+Optional overrides for non-standard installs:
 
 ```bash
-export CLAUDE_CODE_PATH=/path/to/claude        # if not in PATH
-export CLAUDE_CODE_GIT_BASH_PATH=/path/to/bash # Windows: git-bash location
+export CLAUDE_CODE_PATH=/path/to/claude
+export CLAUDE_CODE_GIT_BASH_PATH=/path/to/bash   # Windows only
 ```
 
 ## CLI Reference
 
 ```bash
-lumina init <name>                     # Create project
-lumina init <name> --path <parent>     # Create in specific parent directory
+lumina init <name>                       # Create project
+lumina init <name> --path <parent>       # In specific parent directory
 
-lumina build                           # Build with default agent (llm)
-lumina build --agent claude_code       # Use Claude Code
-lumina build --agent llm               # Use LLM API
-lumina build --dry-run                 # Parse + show Task JSON, no AI
-lumina build --force                   # Skip cache, rebuild all
-lumina build --mode microservice       # Microservice mode
+lumina build                             # Build with agent from Lumina.toml
+lumina build --agent claude_code         # Override agent
+lumina build --dry-run                   # Parse + show Task JSON, no AI
+lumina build --force                     # Skip cache, rebuild all
+lumina build --only Module1,Module2      # Rebuild specific modules only
+lumina build --mode microservice         # Microservice mode
 
-lumina parse <file.lm>                 # Show AST
-lumina parse <file.lm> --format json   # Show Task JSON
-lumina --version                       # Show version
+lumina parse <file.lm>                   # Show AST
+lumina parse <file.lm> --format json     # Show Task JSON
+
+lumina --version                         # Show version
 ```
