@@ -1,0 +1,11 @@
+{
+  "TaskManager": {
+    "hash": "09a833b16ffa32af98eda49df3a4124ae24383cc41bea14b2b2727155c1ae609",
+    "files": [
+      {
+        "path": "taskmanager.ts",
+        "content": "import { LuminaActor } from '../lumina';\n\ninterface Task {\n  id: string;\n  payload: string;\n  priority: number;\n  timestamp: string;\n}\n\nexport class TaskManager extends LuminaActor {\n  private tasks: Task[] = [];\n\n  run(): void {\n    this.tasks = [];\n  }\n\n  invoke(method: string, params: Record<string, any>): Record<string, any> {\n    switch (method) {\n      case 'submit':\n        return this.handleSubmit(params);\n      case 'list':\n        return this.handleList();\n      case 'remove':\n        return this.handleRemove(params);\n      default:\n        throw new Error(`Unknown method: ${method}`);\n    }\n  }\n\n  private handleSubmit(params: Record<string, any>): Record<string, any> {\n    const id = crypto.randomUUID();\n    this.tasks.push({\n      id,\n      payload: params.payload,\n      priority: params.priority,\n      timestamp: new Date().toISOString(),\n    });\n    return { id };\n  }\n\n  private handleList(): Record<string, any> {\n    const sorted = [...this.tasks].sort((a, b) => {\n      if (b.priority !== a.priority) return b.priority - a.priority;\n      return a.timestamp.localeCompare(b.timestamp);\n    });\n    return {\n      tasks: sorted.map(t => ({\n        id: { value: t.id },\n        payload: { value: t.payload },\n        priority: { value: String(t.priority) },\n        timestamp: { value: t.timestamp },\n      })),\n    };\n  }\n\n  private handleRemove(params: Record<string, any>): Record<string, any> {\n    const idx = this.tasks.findIndex(t => t.id === params.id);\n    if (idx !== -1) {\n      this.tasks.splice(idx, 1);\n    }\n    return { ok: 'removed' };\n  }\n}\n"
+      }
+    ]
+  }
+}

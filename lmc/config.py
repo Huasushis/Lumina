@@ -27,7 +27,7 @@ class AgentConfig:
 
     # Claude Code settings
     cli_path: str = "claude"
-    claude_timeout: int = 600
+    claude_timeout: int = 900
 
 
 def get_agent_config() -> AgentConfig:
