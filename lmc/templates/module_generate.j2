@@ -61,16 +61,17 @@ Actor "{{ name }}" (type: {{ actor.module_type }}):
 {{ extra_hint }}
 {% endif %}
 [OUTPUT FORMAT]
-Respond ONLY with a JSON object containing the generated files:
+Respond ONLY with:
 {
   "task_id": "{{ module_name }}",
   "files": [
     {
-      "path": "relative/path/to/file",
+      "path": "{{ module_name | lower }}.{{ extension }}",
       "content": "<full source code>"
     }
   ]
 }
+Put exactly ONE file. The path is the filename only, no subdirectories.
 
 [REQUIREMENTS]
 1. Target language: {{ target_language }}. Use idiomatic conventions.
