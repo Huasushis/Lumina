@@ -11,19 +11,17 @@ Available runtimes: {{ env.available_runtimes | join(", ") }}
 
 [MODULES IMPLEMENTED]
 {% for name, info in modules.items() %}
-Module "{{ name }}" (directory: {{ name }}/)
-  Files:
+Module "{{ name }}" (directory: {{ name }}/):
 {% for f in info.files %}
-    - {{ name }}/{{ f.path }}
+  - {{ name }}/{{ f.path }}
 {% endfor %}
 {% endfor %}
 
 [SYSTEM TOPOLOGY]
-Dependency order (build leaf modules first):
+Dependency order:
 {% for name in dependency_order %}
   {{ loop.index }}. {{ name }}
 {% endfor %}
-
 {% if actor_graph %}
 Actor wiring:
 {% for mod, children in actor_graph.items() %}
@@ -35,27 +33,34 @@ Actor wiring:
 {% endif %}
 
 [REQUIREMENT]
-1. Create ONLY the entry point, runtime glue, and any required project config.
-   Do NOT re-implement modules. Modules are already in their subdirectories.
-2. Generate any language-required configuration files:
-   - TypeScript/Node: package.json with "type": "module"
-   - Rust: Cargo.toml
-   - Others: whatever is needed to compile and run
-3. For TypeScript: use .ts extensions in import paths (not .js).
-   The runtime is node --experimental-strip-types with direct .ts imports.
-4. Platform compatibility:
-   - On this system ({{ env.os }}): prefer foreground mode with simple PID file for daemon patterns.
-   - Do NOT use child_process.spawn() with detached+windowsHide on Windows — it crashes.
-   - Use writeFileSync(pidFile) + process.on(SIGINT/exit) for lifecycle management.
-   - For daemons: start writes PID and runs foreground; stop reads PID and kills; status checks PID.
-3. The entry point MUST:
+1. Generate a runtime base class file at the build root:
+   - TypeScript: `runtime.ts` exporting LuminaActor and MessageRouter
+   - Python: `_runtime/lumina_actor.py` exporting LuminaActor and MessageRouter
+2. Generate the entry point. Do NOT re-implement modules.
+3. Generate any language-required config files (package.json, Cargo.toml, etc.).
+4. For TypeScript: .ts extensions in imports, package.json with "type": "module".
+5. Module import contract (do NOT change these paths):
+   - Modules import LuminaActor from `../runtime.ts` (TS) or `_runtime.lumina_actor` (Python)
+   - Entry point imports modules from `./ModuleName/modulename.ts` (TS) or `./ModuleName/modulename` (Python)
+6. The entry point MUST:
    - Import each module from its subdirectory
    - Instantiate and register all actors
    - Call run() on each actor
-   - Block the main thread indefinitely so the process stays alive
-3. Write complete, working code. No placeholders.
-{% if assemble_hint %}
+   - Block forever so the process stays alive (event loop, sleep, stdin readline)
 
+5. DAEMON/SERVICE pattern (when assemble hint asks for background service):
+   - Running with NO arguments ("foreground mode"): start the REPL in the current terminal.
+     This is for debugging. Should be interactive.
+   - "start" command: spawn a NEW background process that writes a PID file
+     and holds the REPL open. Return control to the calling terminal immediately.
+     On Windows: use spawn("cmd", ["/c", "start", "/B", "node", ...], {shell: true}).
+     On Linux/Mac: use spawn("node", [...], {detached: true, stdio: "ignore"}).
+   - "stop" command: read PID file, kill the process, clean up PID file.
+   - "status" command: check if the PID in the PID file is alive.
+   - PID file location: next to the entry point file (e.g., ".daemon.pid").
+
+6. Write complete, working code. No placeholders. Use .ts extension for TypeScript imports.
+{% if assemble_hint %}
 [CUSTOM ASSEMBLY REQUIREMENT]
 {{ assemble_hint }}
 {% endif %}

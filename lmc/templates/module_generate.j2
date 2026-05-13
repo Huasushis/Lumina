@@ -75,10 +75,12 @@ Respond ONLY with a JSON object containing the generated files:
 [REQUIREMENTS]
 1. Target language: {{ target_language }}. Use idiomatic conventions.
 2. Implement ONLY module {{ module_name }} as one class/struct/actor.
-3. The class MUST inherit from a LuminaActor base class provided by the runtime.
-4. Import the base class using the standard import path for the language.
-5. For TypeScript: use .ts extensions in imports, not .js.
-6. Override run() and invoke(). Do not add other public methods.
+3. The class MUST inherit from a LuminaActor base class.
+   Import it from EXACTLY this path relative to YOUR file's location:
+   - TypeScript (file in ModuleName/ subdir): `import { LuminaActor } from "../runtime.ts"`
+   - Python (file in ModuleName/ subdir): `from _runtime.lumina_actor import LuminaActor`
+4. For TypeScript: use .ts extensions in imports (not .js).
+5. Override run() and invoke(). Do not add other public methods.
 7. For child actors, call the runtime-provided send_message method.
 8. Do NOT directly import or instantiate other modules.
 9. Handle ALL methods listed in the interface contract.
