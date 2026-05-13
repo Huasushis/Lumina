@@ -35,14 +35,19 @@ Actor wiring:
 {% endif %}
 
 [REQUIREMENT]
-1. Create ONLY the entry point and any runtime glue. Do NOT re-implement modules.
-   Modules are already implemented in their subdirectories.
-2. The entry point MUST:
+1. Create ONLY the entry point, runtime glue, and any required project config.
+   Do NOT re-implement modules. Modules are already in their subdirectories.
+2. Generate any language-required configuration files:
+   - TypeScript/Node: package.json with "type": "module"
+   - Rust: Cargo.toml
+   - Others: whatever is needed to compile and run
+3. For TypeScript: use .ts extensions in import paths (not .js).
+   The runtime is node --experimental-strip-types with direct .ts imports.
+3. The entry point MUST:
    - Import each module from its subdirectory
    - Instantiate and register all actors
    - Call run() on each actor
-   - Block the main thread indefinitely (sleep, select, or event loop)
-     so the process stays alive after all actors start
+   - Block the main thread indefinitely so the process stays alive
 3. Write complete, working code. No placeholders.
 {% if assemble_hint %}
 

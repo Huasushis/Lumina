@@ -73,9 +73,10 @@ Respond ONLY with a JSON object containing the generated files:
 2. Implement ONLY module {{ module_name }} as one class/struct/actor.
 3. The class MUST inherit from a LuminaActor base class provided by the runtime.
 4. Import the base class using the standard import path for the language.
-5. Override run() and invoke(). Do not add other public methods.
-6. For child actors, call the runtime-provided send_message method.
-7. Do NOT directly import or instantiate other modules.
-8. Handle ALL methods listed in the interface contract.
-9. Return an object from invoke() matching the output schema exactly.
-10. Output ONLY the JSON block — no markdown, no extra text.
+5. For TypeScript: use .ts extensions in imports, not .js.
+6. Override run() and invoke(). Do not add other public methods.
+7. For child actors, call the runtime-provided send_message method.
+8. Do NOT directly import or instantiate other modules.
+9. Handle ALL methods listed in the interface contract.
+10. Return an object from invoke() matching the output schema exactly.
+11. Output ONLY the JSON block — no markdown, no extra text.
