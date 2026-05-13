@@ -67,27 +67,65 @@ module GameUI {
 
 ```bash
 cd examples/guess-game
-lumina build --agent claude_code
+lumina build
 python .lumina/build/main.py
-```
-
-```
-> GameUI.submit_guess {"value": 50}
-Hint: higher
-Attempts: 1/10
-> GameUI.submit_guess {"value": 75}
-Hint: lower
-...
 ```
 
 ---
 
 ## Daemon Service (TypeScript)
 
-Background task queue with start/stop/status commands.
+Background task queue with foreground mode and start/stop/status commands.
+
+### main.lm
+
+```rust
+module TaskManager {
+    setup: "initialize empty task queue in memory"
+
+    interface: {
+        "submit": { "payload": String, "priority": Int } -> { "id": String }
+        "list": { } -> { "tasks": List<Map<String, Map<String, String>>> }
+        "remove": { "id": String } -> { "ok": String }
+    }
+
+    logic: "in-memory priority queue with auto-generated UUIDs"
+}
+```
+
+### Lumina.toml
+
+```toml
+[project]
+name = "ts-daemon"
+language = "typescript"
+
+[build]
+mode = "monolith"
+agent = "claude_code"
+assemble = "生成一个后台服务。支持命令行参数 start/stop/status..."
+```
+
+### Build and run
 
 ```bash
 cd examples/ts-daemon
-lumina build --agent claude_code
-npx tsx .lumina/build/main.ts
+lumina build
+
+# Foreground mode (interactive stdin)
+node --experimental-strip-types .lumina/build/daemon.mts
+
+# Daemon mode
+node --experimental-strip-types .lumina/build/daemon.mts start
+node --experimental-strip-types .lumina/build/daemon.mts status
+node --experimental-strip-types .lumina/build/daemon.mts stop
+```
+
+```
+> submit {"payload":"hello","priority":3}
+Task submitted: a27f3cde-f74b-4fa1-bbd0-e4745b004414
+> list
+2 task(s):
+  1. [a27f3cde] pri=3 hello
+> quit
 ```
