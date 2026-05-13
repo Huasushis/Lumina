@@ -100,6 +100,7 @@ def build(
 
     agent_cfg = get_agent_config()
     agent_cfg.type = agent_type or manifest.build.agent
+    agent_cfg.claude_timeout = manifest.build.timeout
 
     parser = LuminaParser()
     resolver = Resolver(parser)

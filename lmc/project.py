@@ -31,6 +31,7 @@ class ModuleOverride:
 class BuildSection:
     mode: str = "monolith"
     agent: str = "llm"
+    timeout: int = 900  # seconds per module/assembly
     assemble: str | None = None
 
 
@@ -56,6 +57,7 @@ def parse_manifest(path: Path) -> LuminaManifest:
         build=BuildSection(
             mode=build_raw.get("mode", "monolith"),
             agent=build_raw.get("agent", "llm"),
+            timeout=build_raw.get("timeout", 900),
             assemble=build_raw.get("assemble"),
         ),
         modules={
@@ -103,6 +105,7 @@ language = "python"
 [build]
 mode = "monolith"
 agent = "llm"
+# timeout = 900
 # assemble = "custom assembly instruction"
 
 # Per-module overrides (optional):
