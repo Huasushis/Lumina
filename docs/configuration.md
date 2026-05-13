@@ -81,6 +81,7 @@ lumina build --agent claude_code         # Override agent
 lumina build --dry-run                   # Parse + show Task JSON, no AI
 lumina build --force                     # Skip cache, rebuild all
 lumina build --only Module1,Module2      # Rebuild specific modules only
+lumina build --hint "use async IO"       # Extra AI prompt, appended to task
 lumina build --mode microservice         # Microservice mode
 
 lumina parse <file.lm>                   # Show AST
