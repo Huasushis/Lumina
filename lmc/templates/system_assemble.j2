@@ -43,6 +43,11 @@ Actor wiring:
    - Others: whatever is needed to compile and run
 3. For TypeScript: use .ts extensions in import paths (not .js).
    The runtime is node --experimental-strip-types with direct .ts imports.
+4. Platform compatibility:
+   - On this system ({{ env.os }}): prefer foreground mode with simple PID file for daemon patterns.
+   - Do NOT use child_process.spawn() with detached+windowsHide on Windows — it crashes.
+   - Use writeFileSync(pidFile) + process.on(SIGINT/exit) for lifecycle management.
+   - For daemons: start writes PID and runs foreground; stop reads PID and kills; status checks PID.
 3. The entry point MUST:
    - Import each module from its subdirectory
    - Instantiate and register all actors

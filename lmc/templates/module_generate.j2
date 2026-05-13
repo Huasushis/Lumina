@@ -56,6 +56,10 @@ Actor "{{ name }}" (type: {{ actor.module_type }}):
 [LOGIC INTENT]
 {{ logic }}
 {% endif %}
+{% if extra_hint %}
+[ADDITIONAL INSTRUCTION]
+{{ extra_hint }}
+{% endif %}
 [OUTPUT FORMAT]
 Respond ONLY with a JSON object containing the generated files:
 {

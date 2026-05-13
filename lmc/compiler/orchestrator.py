@@ -37,6 +37,7 @@ class Orchestrator:
         force: bool = False,
         project_root: Path | None = None,
         only_modules: set[str] | None = None,
+        extra_hint: str | None = None,
     ):
         self._output_dir = output_dir
         self._build_mode = build_mode
@@ -45,6 +46,7 @@ class Orchestrator:
         self._force = force
         self._project_root = project_root or output_dir
         self._only = only_modules
+        self._hint = extra_hint
         self._parser = LuminaParser()
         self._resolver = Resolver(self._parser)
         self._checker = Checker()
@@ -139,6 +141,7 @@ class Orchestrator:
                 target_language=self._language,
                 extension="ts" if self._language == "typescript" else "py",
                 language_name="TypeScript" if self._language == "typescript" else "Python",
+                extra_hint=self._hint,
             )
 
             work_dir = self._output_dir / mod_name

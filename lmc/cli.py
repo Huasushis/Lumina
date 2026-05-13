@@ -75,6 +75,8 @@ def build(
                      help="Force rebuild all modules, ignoring cache")] = False,
     only: Annotated[str, typer.Option("--only",
                     help="Only rebuild specific modules (comma-separated)")] = "",
+    hint: Annotated[str, typer.Option("--hint",
+                    help="Extra prompt for AI (appended to task/assembly prompts)")] = "",
 ):
     """Build the Lumina project in the current directory."""
     root = find_project_root()
@@ -156,6 +158,7 @@ def build(
         force=force,
         project_root=root,
         only_modules={m.strip() for m in only.split(",") if m.strip()} if only else None,
+        extra_hint=hint or None,
     )
 
     typer.echo(f"\nGenerating {len(order)} module(s)...")
@@ -190,7 +193,7 @@ def build(
         final_dir = assemble(
             modules=results,
             output_dir=output_dir,
-            assemble_hint=manifest.build.assemble,
+            assemble_hint=_merge_hint(manifest.build.assemble, hint),
             dependency_order=[m for m in order if m in results],
             agent=agent,
             jinja_env=jinja_env,
@@ -279,6 +282,12 @@ def parse_cmd(
 
 
 # ── helpers ────────────────────────────────────────────────────
+
+
+def _merge_hint(base: str | None, extra: str | None) -> str | None:
+    if base and extra:
+        return f"{base}\n{extra}"
+    return extra or base
 
 
 def _print_ast(decls: list) -> None:
