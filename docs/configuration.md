@@ -29,8 +29,8 @@ CLI flag `--agent` overrides this.
 
 ### `mode`
 
-- `monolith`: all actors in one process, in-memory routing
-- `microservice`: each actor is its own service
+- `monolith`: all actors in one process, in-memory routing (tested)
+- `microservice`: each actor is its own service (not yet tested — help wanted!)
 
 ### `assemble`
 

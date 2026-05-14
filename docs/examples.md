@@ -71,6 +71,15 @@ lumina build
 python .lumina/build/main.py
 ```
 
+```
+Enter your guess (1-100, q=quit, n=new game): 50
+Hint: lower
+Enter your guess (1-100, q=quit, n=new game): 25
+Hint: higher
+Enter your guess (1-100, q=quit, n=new game): q
+Goodbye!
+```
+
 ---
 
 ## Daemon Service (TypeScript)
@@ -129,3 +138,9 @@ Task submitted: a27f3cde-f74b-4fa1-bbd0-e4745b004414
   1. [a27f3cde] pri=3 hello
 > quit
 ```
+
+---
+
+## Microservice Mode
+
+`mode = "microservice"` is implemented but not yet tested end-to-end. It should generate per-actor Dockerfiles and a `docker-compose.yml`. If you have Docker installed and want to help, please test it and open an issue!
