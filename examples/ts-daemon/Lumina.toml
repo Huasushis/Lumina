@@ -6,4 +6,4 @@ language = "typescript"
 mode = "monolith"
 agent = "claude_code"
 timeout = 900
-assemble = "生成一个后台服务。支持命令行参数 start（启动并进入后台），stop（发送停止信号），status（查看状态）。启动后监听 stdin 命令：'submit {json}' 提交任务，'list' 查看队列，'quit' 退出。使用 Node.js 进程间通信或 pid 文件管理后台进程。"
+assemble = "后台任务队列服务。支持：start（后台启动，监听 localhost:9123），stop（发 POST /__shutdown），status（查看状态），connect（交互客户端，发命令到服务器）。submit {json} 提交任务，list 查看队列，remove {id} 删除任务。"

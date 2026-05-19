@@ -49,15 +49,27 @@ Actor wiring:
    - Block forever so the process stays alive (event loop, sleep, stdin readline)
 
 5. DAEMON/SERVICE pattern (when assemble hint asks for background service):
-   - Running with NO arguments ("foreground mode"): start the REPL in the current terminal.
-     This is for debugging. Should be interactive.
-   - "start" command: spawn a NEW background process that writes a PID file
-     and holds the REPL open. Return control to the calling terminal immediately.
-     On Windows: use spawn("cmd", ["/c", "start", "/B", "node", ...], {shell: true}).
-     On Linux/Mac: use spawn("node", [...], {detached: true, stdio: "ignore"}).
-   - "stop" command: read PID file, kill the process, clean up PID file.
-   - "status" command: check if the PID in the PID file is alive.
-   - PID file location: next to the entry point file (e.g., ".daemon.pid").
+   Use a LOCAL HTTP SERVER pattern (works identically on Windows/Linux/Mac):
+   - Pick a port (e.g., 9123). Store PID + port in ".daemon.json" alongside the entry point.
+   - NO ARGUMENTS (foreground): start REPL in the current terminal. For debugging.
+   - "start": spawn the daemon as a background process that opens an HTTP server
+     on localhost:PORT. Wait up to 2s for the port to respond, then print "Daemon started
+     (PID: X, Port: Y)". Return control to the terminal immediately.
+     For spawning:
+       * On Windows: spawn("cmd", ["/c", "start", "/B", "/MIN", "node", "--experimental-strip-types", scriptPath, "_daemon"], {stdio: "ignore", shell: false})
+       * On Linux/Mac: spawn("node", [scriptPath, "_daemon"], {detached: true, stdio: "ignore"})
+     The child process with "_daemon" argument starts the HTTP server and writes the PID+port file.
+   - "stop": send HTTP POST http://localhost:PORT/__shutdown, then clean up the JSON file.
+   - "status": read the JSON file, check if PID is alive. Print running/stopped.
+   - "connect": open an interactive client in the current terminal. Read stdin lines,
+     send them as POST http://localhost:PORT/cmd with {"line": "<input>"}.
+     Print the JSON response. "quit" in the client exits the client (does NOT stop the daemon).
+   - HTTP routes on the daemon:
+     * POST /cmd  {line: "submit {...}" | "list" | "remove ..." | ...}
+       → returns JSON response from the actor
+     * POST /__shutdown → stops the server and exits the process
+     * GET /__status → returns {"pid": X, "port": Y, "uptime": seconds}
+   The HTTP server passes command lines directly to the actor's invoke() methods.
 
 6. Write complete, working code. No placeholders. Use .ts extension for TypeScript imports.
 {% if assemble_hint %}
