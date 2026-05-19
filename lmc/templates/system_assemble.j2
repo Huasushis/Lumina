@@ -56,7 +56,8 @@ Actor wiring:
      on localhost:PORT. Wait up to 2s for the port to respond, then print "Daemon started
      (PID: X, Port: Y)". Return control to the terminal immediately.
      For spawning:
-       * On Windows: spawn("cmd", ["/c", "start", "/B", "/MIN", "node", "--experimental-strip-types", scriptPath, "_daemon"], {stdio: "ignore", shell: false})
+       * On Windows: spawn("node", ["--experimental-strip-types", scriptPath, "_daemon"], {detached: true, stdio: "ignore", windowsHide: true, shell: false})
+         Then call child.unref() to detach from parent. The daemon writes .daemon.json after the server starts.
        * On Linux/Mac: spawn("node", [scriptPath, "_daemon"], {detached: true, stdio: "ignore"})
      The child process with "_daemon" argument starts the HTTP server and writes the PID+port file.
    - "stop": send HTTP POST http://localhost:PORT/__shutdown, then clean up the JSON file.
